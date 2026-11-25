@@ -5,16 +5,19 @@ import '../../app/providers.dart';
 import '../../domain/entities/machine_profile.dart';
 import '../../domain/services/contour_generator.dart';
 import '../../domain/services/engraving_generator.dart';
+import '../../domain/services/relief_generator.dart';
 import '../viewer/viewer_controller.dart';
 
 /// Operación CAM seleccionada.
 enum CamOperation {
   engrave,
-  contour;
+  contour,
+  relief;
 
   String get label => switch (this) {
     CamOperation.engrave => 'Grabado',
     CamOperation.contour => 'Contorno',
+    CamOperation.relief => 'Relieve',
   };
 }
 
@@ -27,6 +30,7 @@ class CamUiState {
     this.operation = CamOperation.engrave,
     this.engraveResult,
     this.contourResult,
+    this.reliefResult,
     this.isBusy = false,
     this.error,
     this.message,
@@ -37,20 +41,25 @@ class CamUiState {
   final CamOperation operation;
   final EngravingResult? engraveResult;
   final ContourResult? contourResult;
+  final ReliefResult? reliefResult;
   final bool isBusy;
   final String? error;
   final String? message;
 
   bool get hasImage => imageBytes != null;
 
-  bool get hasResult => engraveResult != null || contourResult != null;
+  bool get hasResult =>
+      engraveResult != null || contourResult != null || reliefResult != null;
 
   /// Vista previa de la operación activa.
   Uint8List? get previewPng =>
-      engraveResult?.previewPng ?? contourResult?.previewPng;
+      engraveResult?.previewPng ??
+      contourResult?.previewPng ??
+      reliefResult?.previewPng;
 
   /// G-code de la operación activa.
-  String? get gcode => engraveResult?.gcode ?? contourResult?.gcode;
+  String? get gcode =>
+      engraveResult?.gcode ?? contourResult?.gcode ?? reliefResult?.gcode;
 
   CamUiState copyWith({
     Uint8List? imageBytes,
@@ -58,6 +67,7 @@ class CamUiState {
     CamOperation? operation,
     EngravingResult? engraveResult,
     ContourResult? contourResult,
+    ReliefResult? reliefResult,
     bool? isBusy,
     String? error,
     String? message,
@@ -66,6 +76,7 @@ class CamUiState {
     bool clearImage = false,
     bool clearEngrave = false,
     bool clearContour = false,
+    bool clearRelief = false,
   }) {
     return CamUiState(
       imageBytes: clearImage ? null : (imageBytes ?? this.imageBytes),
@@ -77,6 +88,7 @@ class CamUiState {
       contourResult: clearContour
           ? null
           : (contourResult ?? this.contourResult),
+      reliefResult: clearRelief ? null : (reliefResult ?? this.reliefResult),
       isBusy: isBusy ?? this.isBusy,
       error: clearError ? null : (error ?? this.error),
       message: clearMessage ? null : (message ?? this.message),
@@ -92,6 +104,7 @@ class CamUiState {
 class CamController extends Notifier<CamUiState> {
   static const EngravingGenerator _engraver = EngravingGenerator();
   static const ContourGenerator _contour = ContourGenerator();
+  static const ReliefGenerator _relief = ReliefGenerator();
 
   @override
   CamUiState build() => const CamUiState();
@@ -105,6 +118,7 @@ class CamController extends Notifier<CamUiState> {
       operation: operation,
       clearEngrave: true,
       clearContour: true,
+      clearRelief: true,
       clearError: true,
       clearMessage: true,
     );
@@ -228,6 +242,71 @@ class CamController extends Notifier<CamUiState> {
     }
   }
 
+  /// Genera el relieve 2.5D: mapas de altura por niveles con el husillo.
+  Future<void> generateRelief(ReliefSettings settings) async {
+    final MachineProfile? profile = ref.read(activeProfileProvider).value;
+    if (profile == null) {
+      state = state.copyWith(
+        error: 'Crea o selecciona un perfil de máquina antes de generar.',
+      );
+      return;
+    }
+    if (profile.tool != ToolType.mill) {
+      state = state.copyWith(
+        error:
+            'El relieve 2.5D usa el husillo y la Z: requiere un perfil de '
+            'fresadora.',
+      );
+      return;
+    }
+    final Uint8List? bytes = state.imageBytes;
+    if (bytes == null) {
+      state = state.copyWith(error: 'Elige una imagen primero.');
+      return;
+    }
+
+    state = state.copyWith(isBusy: true, clearError: true, clearMessage: true);
+    try {
+      final ReliefResult result = await _relief.generateAsync(
+        ReliefJob(bytes: bytes, settings: settings),
+      );
+      final String? outOfVolume = _outOfVolume(
+        result.widthMm,
+        result.heightMm,
+        profile,
+      );
+      if (outOfVolume != null || result.maxDepthMm > profile.travelZmm) {
+        state = state.copyWith(
+          isBusy: false,
+          clearRelief: true,
+          error:
+              outOfVolume ??
+              'La profundidad (${result.maxDepthMm.toStringAsFixed(1)} mm) '
+                  'excede el recorrido Z del perfil '
+                  '(${profile.travelZmm.toStringAsFixed(1)} mm).',
+        );
+        return;
+      }
+      state = state.copyWith(
+        isBusy: false,
+        reliefResult: result,
+        clearEngrave: true,
+        clearContour: true,
+        message:
+            'Relieve generado: ${result.levels} niveles, '
+            '${(result.cutRatio * 100).toStringAsFixed(0)} % fresado, '
+            '${result.lineCount} líneas.',
+      );
+    } on ReliefException catch (error) {
+      state = state.copyWith(isBusy: false, error: error.message);
+    } on Object catch (error) {
+      state = state.copyWith(
+        isBusy: false,
+        error: 'No se pudo generar el relieve: $error',
+      );
+    }
+  }
+
   /// Carga el resultado activo en el visor para revisarlo (y ejecutarlo allí).
   void sendToViewer() {
     final String? gcode = state.gcode;
@@ -239,9 +318,11 @@ class CamController extends Notifier<CamUiState> {
       RegExp(r'\.[^.]+$'),
       '',
     );
-    final String suffix = state.operation == CamOperation.contour
-        ? '_contorno'
-        : '_grabado';
+    final String suffix = switch (state.operation) {
+      CamOperation.contour => '_contorno',
+      CamOperation.relief => '_relieve',
+      CamOperation.engrave => '_grabado',
+    };
     ref
         .read(viewerControllerProvider.notifier)
         .loadText(gcode, fileName: '$base$suffix.gcode');

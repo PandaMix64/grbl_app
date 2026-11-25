@@ -9,6 +9,7 @@ import '../../app/providers.dart';
 import '../../domain/entities/machine_profile.dart';
 import '../../domain/services/contour_generator.dart';
 import '../../domain/services/engraving_generator.dart';
+import '../../domain/services/relief_generator.dart';
 import 'cam_controller.dart';
 
 /// Vista previa del trabajo: el resultado sobre el material.
@@ -174,6 +175,8 @@ class _CamPageState extends ConsumerState<CamPage> {
   final TextEditingController _tabs = TextEditingController(text: '0');
   final TextEditingController _tabWidth = TextEditingController(text: '3');
   final TextEditingController _tabHeight = TextEditingController(text: '0.8');
+  final TextEditingController _levels = TextEditingController(text: '8');
+  final TextEditingController _maxDepth = TextEditingController(text: '3');
 
   EngravingMode _mode = EngravingMode.threshold;
   ContourTool _contourTool = ContourTool.laser;
@@ -192,6 +195,8 @@ class _CamPageState extends ConsumerState<CamPage> {
     _tabs.dispose();
     _tabWidth.dispose();
     _tabHeight.dispose();
+    _levels.dispose();
+    _maxDepth.dispose();
     super.dispose();
   }
 
@@ -216,6 +221,90 @@ class _CamPageState extends ConsumerState<CamPage> {
   static int _parseCount(TextEditingController controller) {
     final int? value = int.tryParse(controller.text.trim());
     return value == null || value < 0 ? 0 : value;
+  }
+
+  Widget _reliefPanel(ThemeData theme) {
+    return _Panel(
+      icon: Icons.landscape_outlined,
+      title: 'Parámetros de relieve',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Wrap(
+            spacing: 16,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.end,
+            children: <Widget>[
+              _Field(
+                label: 'Ancho (mm)',
+                controller: _width,
+                width: 120,
+                onChanged: () => setState(() {}),
+              ),
+              _Field(
+                label: 'mm por celda',
+                controller: _pixel,
+                width: 120,
+                onChanged: () => setState(() {}),
+              ),
+              _Field(
+                label: 'Niveles',
+                controller: _levels,
+                width: 90,
+                onChanged: () => setState(() {}),
+              ),
+              _Field(
+                label: 'Profundidad (mm)',
+                controller: _maxDepth,
+                width: 140,
+                onChanged: () => setState(() {}),
+              ),
+              _Field(
+                label: 'Paso por pasada',
+                controller: _passDepth,
+                width: 130,
+                onChanged: () => setState(() {}),
+              ),
+              _Field(
+                label: 'RPM',
+                controller: _power,
+                width: 110,
+                onChanged: () => setState(() {}),
+              ),
+              _Field(
+                label: 'Avance (mm/min)',
+                controller: _feed,
+                width: 140,
+                onChanged: () => setState(() {}),
+              ),
+              _Field(
+                label: 'Z segura',
+                controller: _safeZ,
+                width: 110,
+                onChanged: () => setState(() {}),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Text('Invertir', style: theme.textTheme.labelMedium),
+                  Switch(
+                    value: _invert,
+                    onChanged: (bool value) => setState(() => _invert = value),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Claro = sin fresar; oscuro = profundidad máxima. Cada nivel se '
+            'fresa con pasadas hasta su cota, así que el acabado es una '
+            'escalera de profundidad (requiere fresadora).',
+            style: theme.textTheme.labelSmall,
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _contourPanel(ThemeData theme) {
@@ -375,8 +464,38 @@ class _CamPageState extends ConsumerState<CamPage> {
         ),
       ];
     }
+    final ReliefResult? relief = state.reliefResult;
+    if (relief != null) {
+      return <Widget>[
+        Text(
+          'Tamaño: ${relief.widthMm.toStringAsFixed(1)} × '
+          '${relief.heightMm.toStringAsFixed(1)} mm · '
+          '${relief.columns}×${relief.rows} celdas',
+          style: theme.textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${relief.lineCount} líneas · ${relief.levels} niveles · '
+          'profundidad ${relief.maxDepthMm.toStringAsFixed(2)} mm · '
+          '${(relief.cutRatio * 100).toStringAsFixed(0)} % fresado',
+          style: theme.textTheme.bodySmall,
+        ),
+      ];
+    }
     return const <Widget>[];
   }
+
+  ReliefSettings get _reliefSettings => ReliefSettings(
+    widthMm: _parse(_width, 80),
+    pixelMm: _parse(_pixel, 1),
+    levels: _parseCount(_levels).clamp(2, 16),
+    maxDepthMm: _parse(_maxDepth, 3),
+    passDepthMm: _parse(_passDepth, 0.5),
+    rpm: _parse(_power, 8000).round(),
+    feedMmMin: _parse(_feed, 600),
+    safeZmm: _parseSigned(_safeZ, 2),
+    invert: _invert,
+  );
 
   ContourSettings get _contourSettings {
     final double cutZ = _parseSigned(_cutZ, -1);
@@ -470,14 +589,17 @@ class _CamPageState extends ConsumerState<CamPage> {
               ],
             ),
             const SizedBox(height: 4),
-            Text(
-              state.operation == CamOperation.engrave
-                  ? 'Grabado: la imagen se convierte en potencia del láser '
-                        '(M4), con umbral, tramado o escala de grises.'
-                  : 'Contorno: se vectoriza la silueta y se corta con pasadas '
-                        'en Z y pestañas de sujeción.',
-              style: theme.textTheme.bodySmall,
-            ),
+            Text(switch (state.operation) {
+              CamOperation.engrave =>
+                'Grabado: la imagen se convierte en potencia del láser '
+                    '(M4), con umbral, tramado o escala de grises.',
+              CamOperation.contour =>
+                'Contorno: se vectoriza la silueta y se corta con pasadas '
+                    'en Z y pestañas de sujeción.',
+              CamOperation.relief =>
+                'Relieve: mapa de altura por niveles, fresado con el husillo '
+                    'hasta la profundidad de cada banda.',
+            }, style: theme.textTheme.bodySmall),
             const SizedBox(height: 8),
             SegmentedButton<CamOperation>(
               segments: <ButtonSegment<CamOperation>>[
@@ -636,6 +758,7 @@ class _CamPageState extends ConsumerState<CamPage> {
                 ),
               ),
             if (state.operation == CamOperation.contour) _contourPanel(theme),
+            if (state.operation == CamOperation.relief) _reliefPanel(theme),
             const SizedBox(height: 16),
             _Panel(
               icon: Icons.play_circle_outline,
@@ -653,11 +776,17 @@ class _CamPageState extends ConsumerState<CamPage> {
                   else ...<Widget>[
                     _PathPreview(
                       png: state.previewPng!,
-                      caption: state.operation == CamOperation.engrave
-                          ? 'Resultado del grabado: 1 celda = 1 píxel · '
-                                '${state.engraveResult!.columns} × '
-                                '${state.engraveResult!.rows}'
-                          : 'Contorno vectorizado: 1 píxel = 1 celda',
+                      caption: switch (state.operation) {
+                        CamOperation.engrave =>
+                          'Resultado del grabado: 1 celda = 1 píxel · '
+                              '${state.engraveResult!.columns} × '
+                              '${state.engraveResult!.rows}',
+                        CamOperation.contour =>
+                          'Contorno vectorizado: 1 píxel = 1 celda',
+                        CamOperation.relief =>
+                          'Mapa de altura: oscuro = más profundo · '
+                              '${state.reliefResult!.levels} niveles',
+                      },
                     ),
                     const SizedBox(height: 12),
                     ..._resultSummary(state, theme),
@@ -676,8 +805,11 @@ class _CamPageState extends ConsumerState<CamPage> {
                                 );
                                 if (state.operation == CamOperation.engrave) {
                                   controller.generate(_settings);
-                                } else {
+                                } else if (state.operation ==
+                                    CamOperation.contour) {
                                   controller.generateContour(_contourSettings);
+                                } else {
+                                  controller.generateRelief(_reliefSettings);
                                 }
                               },
                         icon: state.isBusy

@@ -9,6 +9,7 @@ import 'package:grbl_app/data/serial/grbl_worker_client.dart';
 import 'package:grbl_app/domain/entities/machine_profile.dart';
 import 'package:grbl_app/domain/services/contour_generator.dart';
 import 'package:grbl_app/domain/services/engraving_generator.dart';
+import 'package:grbl_app/domain/services/relief_generator.dart';
 import 'package:grbl_app/features/cam/cam_controller.dart';
 import 'package:grbl_app/features/viewer/viewer_controller.dart';
 import 'package:image/image.dart' as img;
@@ -159,6 +160,52 @@ void main() {
     expect(state().error, contains('láser'));
   });
 
+  test('genera un relieve con perfil de fresadora', () async {
+    await useProfile(
+      laserProfile.copyWith(
+        tool: ToolType.mill,
+        name: 'Fresadora',
+        maxSpindleRpm: 8000,
+      ),
+    );
+    controller().loadImage(_blackImage(), 'logo.png');
+    controller().setOperation(CamOperation.relief);
+
+    await controller().generateRelief(
+      const ReliefSettings(
+        widthMm: 10,
+        pixelMm: 1,
+        levels: 4,
+        maxDepthMm: 2,
+        passDepthMm: 1,
+        rpm: 8000,
+      ),
+    );
+
+    expect(state().error, isNull, reason: state().error);
+    expect(state().reliefResult, isNotNull);
+    expect(state().reliefResult!.levels, 4);
+    expect(state().message, contains('Relieve generado'));
+    expect(state().previewPng, isNotNull);
+
+    controller().sendToViewer();
+    expect(
+      container.read(viewerControllerProvider).fileName,
+      'logo_relieve.gcode',
+    );
+  });
+
+  test('el relieve exige un perfil de fresadora', () async {
+    await useProfile(laserProfile);
+    controller().loadImage(_blackImage(), 'logo.png');
+    controller().setOperation(CamOperation.relief);
+
+    await controller().generateRelief(const ReliefSettings());
+
+    expect(state().reliefResult, isNull);
+    expect(state().error, contains('fresadora'));
+  });
+
   test('cambiar de operación descarta el resultado anterior', () async {
     await useProfile(laserProfile);
     controller().loadImage(_blackImage(), 'logo.png');
@@ -167,10 +214,11 @@ void main() {
     );
     expect(state().engraveResult, isNotNull);
 
-    controller().setOperation(CamOperation.contour);
+    controller().setOperation(CamOperation.relief);
 
     expect(state().engraveResult, isNull);
     expect(state().contourResult, isNull);
+    expect(state().reliefResult, isNull);
     expect(state().hasResult, isFalse);
   });
 }
