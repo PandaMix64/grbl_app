@@ -9,11 +9,11 @@
 | :--- | :--- |
 | Proyecto | `grbl_app` — entorno CNC con Flutter + GRBL v1.1h |
 | Repositorio | Git local, rama `main` (inicializado 2026-11-24) |
-| Sesión actual | **S-06 (cerrada)** |
-| Fase actual | **Fase 2 cerrada · siguiente: Fase 3 (Visor 3D)** |
-| Avance global estimado | ~75 % |
+| Sesión actual | **S-07 (cerrada)** |
+| Fase actual | **Fase 3 — Visor 3D (en curso)** |
+| Avance global estimado | ~80 % |
 | Bloqueos | Ninguno. Prueba en banco pospuesta (R-10) |
-| Siguiente hito | **M3.1** — intérprete de G-code a segmentos y renderizado con `CustomPainter` |
+| Siguiente hito | **M3.2** — ejecución desde el visor con holgura aplicada, pausa y reanudación persistida |
 
 ---
 
@@ -33,7 +33,7 @@
 | **Fase 0: Fundaciones** | Repo, entorno, contratos de dominio, fachada serial, política de seguridad | 🟢 **Cerrada salvo licencia y CHANGELOG** | Añadida por la revisión técnica; M0.1–M0.3 entregados en S-02 |
 | **Fase 1: Núcleo y Serial** | Clean Architecture, esquema SQLite, navegación M3, isolate serial con *character-counting* | ✅ **Cerrada** | Conexión, handshake, worker, Drift, providers y barra de conexión entregados |
 | **Fase 2: Calibración** | Jogging, pasos/mm, parámetros `$`, perfiles y *backlash* | ✅ **Cerrada** | Jogging, parámetros, pasos/mm, perfiles, holgura, homing y origen |
-| **Fase 3: Visor 3D** | Renderizado, interpretación de G-code, pausa/detención y reanudación segura | 🟡 **Siguiente** | `ResumeState`, `MotionSegment` y `ProjectRepository` ya existen; falta el intérprete y el render |
+| **Fase 3: Visor 3D** | Renderizado, interpretación de G-code, pausa/detención y reanudación segura | 🟡 **En curso (~45 %)** | Intérprete, proyección, pintor y visor con telemetría listos; falta ejecución y pausa |
 | **Fase 3: Visor 3D** | Renderizado, interpretación de G-code, pausa/detención y reanudación segura | ⬜ Pendiente | `ResumeState` y `MotionSegment` ya existen; falta persistencia y render |
 | **Fase 4: Generador CAM** | Imagen → G-code (vectorización, dithering, relieve 2.5D) | ⬜ Pendiente | Modo láser requiere `$32` (P1-1) |
 | **Fase 5: Optimización y Empaquetado** | Rendimiento, atajos, builds Windows/Linux/macOS/Android | ⬜ Pendiente | — |
@@ -97,10 +97,16 @@ Leyenda: 🟡 en curso · ✅ cerrada · ⬜ pendiente · 🔴 bloqueada
 - [x] Aplicar el perfil activo a la conexión (perfil compartido + escritura por diferencias)
 - [x] Homing (`$H`) y definición de origen de trabajo (`G10 L20 P1`)
 
-### M3.1 Visor — siguiente
-- [ ] Intérprete de G-code a `MotionSegment` (incluida conversión de arcos `R` a `I`/`J`)
-- [ ] Renderizado con `CustomPainter` y `drawRawPoints` por lotes (ejecutado/pendiente/rápido)
-- [ ] Cabezal sincronizado con la telemetría y volumen de trabajo del perfil
+### M3.1 Visor (cerrada en S-07)
+- [x] Intérprete de G-code a `MotionSegment` (incluida conversión de arcos `R` a `I`/`J`)
+- [x] Renderizado con `CustomPainter` y `drawRawPoints` por lotes (ejecutado/pendiente/rápido)
+- [x] Cabezal sincronizado con la telemetría y volumen de trabajo del perfil
+
+### M3.2 Ejecución y reanudación — siguiente
+- [ ] Enviar el programa desde el visor aplicando `BacklashCompensator` antes del streaming
+- [ ] Progreso por índice de línea y pintado de lo ejecutado
+- [ ] Pausa con `WorkerPersistRequest` → `ProjectRepository` → confirmación (cierra SEG-05)
+- [ ] Reanudación verificando `$G`/`$#` contra lo guardado
 
 ---
 
@@ -347,6 +353,38 @@ Recuperación de la sesión: `git log --oneline --grep="S-06"`.
 
 ---
 
+### S-07 — 2026-11-24 · Intérprete de G-code y visor 3D (M3.1)
+
+**Alcance:** M3.1 completo: de G-code a segmentos (con arcos), proyección ortográfica propia, pintor por lotes y visor conectado a la telemetría y al perfil activo.
+
+**Entregado**
+
+| # | Cambio | Archivo(s) | Estado |
+| :--- | :--- | :--- | :--- |
+| 1 | `GcodeProgram`: segmentos, línea de origen, avisos, volumen y longitudes | `lib/domain/entities/gcode_program.dart` | ✅ |
+| 2 | `GcodeInterpreter`: G0/G1, G2/G3 con `I/J` y `R`, G90/G91, G20/G21, comentarios y avisos | `lib/domain/services/gcode_interpreter.dart` | ✅ |
+| 3 | `ViewProjection`: proyección ortográfica con guiñada/cabeceo y `fitScale` | `lib/features/viewer/view_projection.dart` | ✅ |
+| 4 | `ProgramPainter`: tres lotes con `drawRawPoints`, volumen, rejilla y cabezal | `lib/features/viewer/program_painter.dart` | ✅ |
+| 5 | `ViewerCanvas`: desplazar, acercar y rotar con gestos; doble toque restablece | `lib/features/viewer/widgets/viewer_canvas.dart` | ✅ |
+| 6 | `ViewerController` y página con estadísticas, avisos y apertura de archivo | `lib/features/viewer/viewer_controller.dart`, `viewer_page.dart` | ✅ |
+| 7 | 28 pruebas nuevas (178 en total, 1 saltada) | `test/domain/`, `test/features/`, `test/widget_test.dart` | ✅ |
+
+**Verificaciones ejecutadas:** `flutter analyze` → *No issues found* · `flutter test` → **178 en verde, 1 saltada** · `dart format` → 0 cambios.
+
+**Decisiones de diseño**
+
+- El visor simula **coordenadas de trabajo** y avisa (en lugar de fingir) de `G28`, `G30`, `G53` y `G92`.
+- Los arcos se subdividen a 5° por defecto, lo que permite estimar longitudes y preparar la compensación de holgura por segmentos.
+- Los tres lotes (rápido / pendiente / ejecutado) se envían con `drawRawPoints(PointMode.lines)` para no cambiar de `Paint` por segmento.
+
+**Lección de proceso (segunda vez):** al reemplazar bloques grandes de pruebas se volvieron a perder assertions existentes; se detectó al ejecutar y se restauró. A partir de ahora los cambios en pruebas se harán con anclas cortas y única ocurrencia.
+
+**Decisiones tomadas:** ADR-022, ADR-023.
+
+**Abierto al cierre:** ejecución desde el visor, pausa/reanudación y el parseo asíncrono para archivos grandes (R-17).
+
+---
+
 ## 5. Decisiones de arquitectura (ADR resumidas)
 
 | ID | Decisión | Motivo | Consecuencia |
@@ -372,6 +410,8 @@ Recuperación de la sesión: `git log --oneline --grep="S-06"`.
 | ADR-019 | El perfil activo se guarda en `activeProfileIdProvider`, no dentro de la conexión | Evita el ciclo conexión → calibración → conexión | Ambos controladores leen el mismo id; la conexión resuelve el perfil por id |
 | ADR-020 | El origen de trabajo se fija con `G10 L20 P1`, nunca con `G92` | `G92` no persiste y puede disparar `ALARM:2` con soft limits (P0-2) | La UI no expone `G92` en ningún flujo |
 | ADR-021 | La holgura se compensa con un movimiento extra en la dirección nueva; Z y arcos excluidos | Físicamente consume el juego mecánico sin falsear coordenadas | El post-procesador se aplicará al G-code antes de enviarlo (Fase 3) |
+| ADR-022 | El visor simula coordenadas de trabajo y **avisa** de `G28`/`G30`/`G53`/`G92` | Simular esos códigos requeriría modelar offsets y homing, y una simulación incorrecta es peor que ninguna | El intérprete acumula avisos que la UI muestra como "N avisos" |
+| ADR-023 | Render en tres lotes con `drawRawPoints(PointMode.lines)` y proyección propia | Evita un motor 3D y mantiene un `Paint` por categoría; escalable a cientos de miles de segmentos | La proyección se recalcula por frame (aceptable); si molesta, cachear por vista |
 
 ---
 
@@ -405,19 +445,21 @@ Recuperación de la sesión: `git log --oneline --grep="S-06"`.
 | R-13 | La conexión desde la UI se cubre en tests de controlador, no con un widget test que pulse «Conectar» | Un fallo de cableado UI ↔ controlador no se detectaría en CI | Prueba E2E en build con hardware (R-10) y revisión manual al integrar la Fase 2 | 🟡 Vigilado |
 | R-14 | El jog es por pasos discretos: no hay modo continuo al mantener pulsado | Posicionamiento fino incómodo en recorridos largos | Implementar el bucle incremental `s = v·dt` de `jogging.md` cuando la UI esté estable | 🟡 Vigilado |
 | R-15 | El perfil activo aún no se aplica a la conexión ni al post-procesado | Cambios de perfil no afectan a la ejecución | Cerrado en S-06: perfil compartido, comparado al conectar y aplicable a la EEPROM | ✅ Cerrado |
-| R-16 | La compensación de holgura no cubre arcos ni el eje Z, y todavía no se aplica al ejecutar | Desviación residual en contornos con arcos | Documentado en `BacklashCompensator`; los arcos se convertirán a segmentos en la Fase 3 y Z queda excluido a propósito | 🟡 Vigilado |
+| R-16 | La compensación de holgura no cubre arcos ni el eje Z, y todavía no se aplica al ejecutar | Desviación residual en contornos con arcos | Los arcos ya se subdividen a segmentos en el visor; falta aplicar el compensador al enviar (M3.2) | 🟡 Vigilado |
+| R-17 | El intérprete es síncrono: un archivo de 100 000 líneas puede congelar la UI | Mala experiencia con trabajos grandes | Mover el parseo a un isolate (Fase 5 o antes si se nota) | 🟡 Vigilado |
 
 ---
 
 ## 8. Próximos pasos (orden estricto)
 
-1. **M3.1 — Intérprete de G-code**: de texto a `MotionSegment` (G0/G1, subdivisión de arcos `G2/G3` con `R`→`I`/`J`, unidades y offsets), con tests.
-2. **Visor**: `CustomPainter` con `drawRawPoints` en tres lotes (rápido, pendiente, ejecutado), zoom/pan y volumen del perfil.
-3. **Ejecución**: aplicar `BacklashCompensator` antes de enviar, streaming desde el visor y progreso por índice de línea.
-4. **Pausa/stop desde el visor** conectando `WorkerPersistRequest` con `ProjectRepository` (cierra SEG-05 y R-12 en la práctica).
+1. **M3.2 — Ejecución desde el visor**: enviar el programa con `BacklashCompensator` aplicado, progreso por índice de línea y pintado de lo ejecutado.
+2. **Pausa real**: `WorkerPersistRequest` → `ProjectRepository.persistAndConfirm` → confirmación (cierra SEG-05 en la práctica).
+3. **Reanudación**: comparar `$G`/`$#` con `ResumeState` y ofrecer reinicio seguro si divergen.
+4. **Alertas de pausa/detención** con las tres consecuencias y confirmación explícita.
 5. Prueba de humo en build de escritorio cuando la UI esté completa (R-10).
 6. `CHANGELOG.md`, licencia y `NOTICE` con la atribución GPLv3 de GRBL.
 7. Push al remoto para ejecutar el CI (R-08).
+
 
 
 

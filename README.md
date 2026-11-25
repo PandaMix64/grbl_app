@@ -13,7 +13,7 @@ Flutter + Material Design 3, Clean Architecture con gestión de estado reactiva,
 | Fase 0 — Fundaciones | ✅ Cerrada |
 | Fase 1 — Núcleo y Serial | ✅ Cerrada |
 | Fase 2 — Calibración | ✅ Cerrada |
-| Fase 3 — Visor 3D | 🟡 Siguiente |
+| Fase 3 — Visor 3D | 🟡 En curso (intérprete y visor listos) |
 | Fase 4 — Generador CAM | ⬜ Pendiente |
 | Fase 5 — Optimización y empaquetado | ⬜ Pendiente |
 
@@ -73,12 +73,13 @@ lib/
   features/
     connection/ # controlador y barra de conexión
     calibration/ # jog, parámetros $, pasos/mm y perfiles
-    home/ viewer/ cam/
+    viewer/     # intérprete → segmentos, proyección, pintor y visor 3D
+    home/ cam/
 test/
-  domain/       # protocolo, perfiles, proyectos, consistencia, jog y pasos/mm
+  domain/       # protocolo, perfiles, proyectos, consistencia, jog, pasos/mm, G-code
   serial/       # presupuesto de 128 B, seguridad, handshake, jog y escritura
   data/         # base de datos real y persistencia del punto de reanudación
-  features/     # controladores de conexión y calibración
+  features/     # controladores, proyección y visor
   helpers/      # FakeSerialPort: emulador GRBL de pruebas
 ```
 
@@ -113,6 +114,13 @@ El módulo de Calibración permite:
 - **Perfiles**: alta, edición y borrado con validación de volumen, altura segura, holgura y herramienta, más un botón para **aplicar** el perfil a la EEPROM (`$32`, `$30`, `$130-$132`), escribiendo solo lo que difiere.
 - **Holgura**: prueba guiada (ida y vuelta con jog), estimación y guardado en el perfil. La compensación se aplica con movimiento real (`BacklashCompensator`), nunca con `G92`.
 - **Homing y origen**: `$H` y `G10 L20 P1` (cero de G54 persistente), siempre con confirmación explícita.
+
+## Visor
+
+`Visor` interpreta G-code (`G0`/`G1`/`G2`/`G3` con `I`/`J` o `R`, `G90`/`G91`, `G20`/`G21`) y lo dibuja con `CustomPainter` en tres lotes: rápido, pendiente y ejecutado. El cabezal se sincroniza con la telemetría y el volumen de trabajo sale del perfil activo.
+
+- Arrastrar desplaza, pellizcar/rueda acerca, girar rota y doble toque restablece la vista.
+- Los códigos que cambian el sistema de coordenadas (`G28`, `G30`, `G53`, `G92`) **no se simulan**: se muestran como avisos.
 
 ## Persistencia
 
