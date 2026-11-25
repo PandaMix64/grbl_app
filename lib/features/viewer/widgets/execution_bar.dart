@@ -1,8 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../../app/providers.dart';
 import '../../../core/widgets/confirm_dialog.dart';
 import '../../../domain/entities/machine_state.dart';
+import '../../../domain/entities/project_file.dart';
+import '../../calibration/calibration_controller.dart';
 import '../../connection/connection_controller.dart';
 import '../execution_controller.dart';
 import '../viewer_controller.dart';
@@ -24,6 +27,7 @@ class ExecutionBar extends ConsumerWidget {
     final ExecutionController controller = ref.read(
       executionControllerProvider.notifier,
     );
+    final ProjectFile? resumable = ref.watch(resumableProjectProvider).value;
     final ThemeData theme = Theme.of(context);
 
     final bool connected = connection.isConnected;
@@ -122,8 +126,41 @@ class ExecutionBar extends ConsumerWidget {
                     icon: const Icon(Icons.stop),
                     label: const Text('Detener'),
                   ),
+                if (!execution.isActive && resumable != null)
+                  OutlinedButton.icon(
+                    onPressed: connected && idle
+                        ? () => _restart(context, ref, resumable)
+                        : null,
+                    icon: const Icon(Icons.history),
+                    label: const Text('Reanudar trabajo guardado'),
+                  ),
+                if (!execution.isActive &&
+                    (resumable?.resume?.workPosition.length ?? 0) >= 2)
+                  TextButton.icon(
+                    onPressed: connected && idle
+                        ? () => _goToSavedPoint(
+                            context,
+                            ref,
+                            resumable!.resume!.workPosition,
+                          )
+                        : null,
+                    icon: const Icon(Icons.my_location, size: 18),
+                    label: const Text('Llevar al punto guardado'),
+                  ),
               ],
             ),
+            if (!execution.isActive && resumable != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Trabajo guardado: ${resumable.name} · '
+                  'línea ${(resumable.resume?.lineIndex ?? 0) + 1} de '
+                  '${resumable.blockCount}',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.tertiary,
+                  ),
+                ),
+              ),
             if (!connected)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
@@ -177,6 +214,61 @@ class ExecutionBar extends ConsumerWidget {
         );
   }
 
+  Future<void> _restart(
+    BuildContext context,
+    WidgetRef ref,
+    ProjectFile project,
+  ) async {
+    final ResumeState resume = project.resume!;
+    final String position = resume.workPosition.length >= 2
+        ? resume.workPosition
+              .take(2)
+              .map((double value) => value.toStringAsFixed(2))
+              .join(', ')
+        : 'desconocida';
+    final bool ok = await confirmAction(
+      context,
+      title: 'Reanudar trabajo guardado',
+      message:
+          '«${project.name}» se reanudará desde la línea '
+          '${resume.lineIndex + 1} en el punto ($position).\n\n'
+          'Antes de continuar comprueba que la máquina está en Idle y con '
+          'homing hecho, que el cero de trabajo es el mismo del trabajo y que '
+          'la herramienta está montada y libre de obstáculos.\n\n'
+          'Se verifican \$G y \$# contra lo guardado: si no coinciden, se cancela.',
+      confirmLabel: 'Reanudar',
+    );
+    if (!ok) {
+      return;
+    }
+    await ref.read(executionControllerProvider.notifier).restartFromSaved();
+  }
+
+  Future<void> _goToSavedPoint(
+    BuildContext context,
+    WidgetRef ref,
+    List<double> target,
+  ) async {
+    final String point = target
+        .take(2)
+        .map((double value) => value.toStringAsFixed(2))
+        .join(', ');
+    final bool ok = await confirmAction(
+      context,
+      title: 'Llevar al punto guardado',
+      message:
+          'La máquina se desplazará al punto ($point) del sistema de trabajo '
+          'actual. Retira obstáculos del recorrido antes de continuar.',
+      confirmLabel: 'Mover',
+    );
+    if (!ok) {
+      return;
+    }
+    await ref
+        .read(calibrationControllerProvider.notifier)
+        .jogToWorkPosition(target, label: 'al punto guardado');
+  }
+
   Future<void> _stop(
     BuildContext context,
     ExecutionController controller,
@@ -210,6 +302,7 @@ class _StatusChip extends StatelessWidget {
       ExecutionStatus.running => theme.colorScheme.primary,
       ExecutionStatus.paused => theme.colorScheme.tertiary,
       ExecutionStatus.completed => theme.colorScheme.secondary,
+      ExecutionStatus.interrupted => theme.colorScheme.error,
       ExecutionStatus.error => theme.colorScheme.error,
       _ => theme.colorScheme.outline,
     };
@@ -219,6 +312,7 @@ class _StatusChip extends StatelessWidget {
       ExecutionStatus.paused => 'Pausado',
       ExecutionStatus.stopped => 'Detenido',
       ExecutionStatus.completed => 'Completado',
+      ExecutionStatus.interrupted => 'Interrumpido',
       ExecutionStatus.error => 'Error',
     };
     return Chip(

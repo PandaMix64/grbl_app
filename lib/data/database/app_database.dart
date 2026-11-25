@@ -229,6 +229,21 @@ class AppDatabase extends _$AppDatabase {
     return row?.toDomain();
   }
 
+  /// Marca un proyecto como interrumpido sin tocar su punto de reanudación.
+  ///
+  /// Se usa al perder el enlace: el progreso guardado sigue siendo válido, pero
+  /// el estado del proyecto debe reflejar que el trabajo no terminó.
+  Future<void> markProjectInterrupted(String projectId) {
+    return (update(
+      projects,
+    )..where(($ProjectsTable t) => t.id.equals(projectId))).write(
+      ProjectsCompanion(
+        status: Value(ProjectStatus.interrupted.name),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
   /// Guarda el punto de reanudación de un proyecto existente.
   Future<void> saveResume({
     required String projectId,

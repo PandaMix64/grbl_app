@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../data/database/app_database.dart';
 import '../data/serial/grbl_worker_client.dart';
 import '../domain/entities/machine_profile.dart';
+import '../domain/entities/project_file.dart';
 
 /// Base de datos local.
 ///
@@ -45,6 +46,23 @@ final NotifierProvider<ActiveProfileId, String?> activeProfileIdProvider =
 final FutureProvider<List<MachineProfile>> profilesProvider =
     FutureProvider<List<MachineProfile>>((Ref ref) async {
       return ref.watch(databaseProvider).allProfiles();
+    });
+
+/// Último trabajo con punto de reanudación guardado.
+///
+/// Alimenta el botón «Reanudar trabajo guardado» del visor: un trabajo pausado,
+/// detenido o interrumpido puede retomarse desde su línea sin volver a empezar.
+final FutureProvider<ProjectFile?> resumableProjectProvider =
+    FutureProvider<ProjectFile?>((Ref ref) async {
+      final List<ProjectFile> projects = await ref
+          .watch(databaseProvider)
+          .recentProjects();
+      for (final ProjectFile project in projects) {
+        if (project.resume != null) {
+          return project;
+        }
+      }
+      return null;
     });
 
 /// Perfil activo resuelto desde la base de datos.

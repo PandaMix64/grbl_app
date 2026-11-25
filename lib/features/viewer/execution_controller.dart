@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -14,10 +15,20 @@ import '../../domain/entities/parser_state.dart';
 import '../../domain/entities/project_file.dart';
 import '../../domain/entities/work_offsets.dart';
 import '../../domain/services/backlash_compensator.dart';
+import '../../domain/services/gcode_interpreter.dart';
 import '../connection/connection_controller.dart';
+import 'viewer_controller.dart';
 
 /// Estado del envío del programa al controlador.
-enum ExecutionStatus { idle, running, paused, stopped, completed, error }
+enum ExecutionStatus {
+  idle,
+  running,
+  paused,
+  stopped,
+  completed,
+  interrupted,
+  error,
+}
 
 /// Estado observable de la ejecución.
 @immutable
@@ -109,6 +120,17 @@ class ExecutionController extends Notifier<ExecutionUiState> {
 
   @override
   ExecutionUiState build() {
+    // Perder el enlace con un trabajo activo deja la máquina en un estado que la
+    // UI no puede seguir: se marca interrumpido y se conserva el progreso.
+    ref.listen(connectionControllerProvider, (
+      ConnectionUiState? previous,
+      ConnectionUiState next,
+    ) {
+      final bool wasConnected = previous?.isConnected ?? false;
+      if (wasConnected && !next.isConnected) {
+        _onConnectionLost();
+      }
+    });
     ref.onDispose(() {
       unawaited(_persistSub?.cancel());
       unawaited(_progressSub?.cancel());
@@ -129,14 +151,51 @@ class ExecutionController extends Notifier<ExecutionUiState> {
     );
   }
 
+  /// Marca el trabajo como interrumpido cuando se pierde el enlace.
+  ///
+  /// El progreso guardado sigue siendo válido: se conserva `resume` para poder
+  /// reiniciar con «Reanudar trabajo guardado» en cuanto vuelva la conexión.
+  void _onConnectionLost() {
+    if (!state.isActive) {
+      return;
+    }
+    unawaited(_persistSub?.cancel());
+    _persistSub = null;
+    unawaited(_progressSub?.cancel());
+    _progressSub = null;
+    final String? projectId = _projectId;
+    if (projectId != null) {
+      unawaited(
+        ref
+            .read(databaseProvider)
+            .markProjectInterrupted(projectId)
+            .catchError((Object _) {}),
+      );
+    }
+    state = state.copyWith(
+      status: ExecutionStatus.interrupted,
+      clearMessage: true,
+      error:
+          'Conexión perdida: el trabajo quedó interrumpido en la línea '
+          '${(state.executedLine ?? 0) + 1}. El progreso guardado sigue '
+          'disponible para reiniciar.',
+    );
+  }
+
   /// Prepara y envía el programa del visor.
   ///
   /// Aplica la compensación de holgura del perfil, guarda el proyecto en la base
   /// de datos (para poder reanudar) y arranca el streaming con progreso.
+  ///
+  /// [resumeFromLine] reenvía el programa a partir de esa línea de origen (para
+  /// reiniciar un trabajo guardado) y [projectId] reutiliza la fila existente en
+  /// lugar de crear un proyecto nuevo.
   Future<void> start({
     required GcodeProgram program,
     required String source,
     String? fileName,
+    int? resumeFromLine,
+    String? projectId,
   }) async {
     final GrblWorkerClient? client = _client;
     if (client == null) {
@@ -192,12 +251,30 @@ class ExecutionController extends Notifier<ExecutionUiState> {
 
     final AppDatabase db = ref.read(databaseProvider);
     final DateTime now = DateTime.now();
-    _projectId = 'job-${now.microsecondsSinceEpoch}';
+    _projectId = projectId ?? 'job-${now.microsecondsSinceEpoch}';
     _repository = ProjectRepository(db);
     _sendToSource = sendMap;
     // La pausa apaga siempre la herramienta, así que el recuerdo de si el
     // trabajo la usa se toma del programa, no del último status report.
     _jobUsesTool = _toolPattern.hasMatch(source);
+
+    final int startIndex = resumeFromLine == null
+        ? 0
+        : _firstSendIndexAt(resumeFromLine, sendMap);
+    if (startIndex >= sendLines.length) {
+      state = state.copyWith(
+        status: ExecutionStatus.completed,
+        totalLines: sourceLines.length,
+        sentLines: sendLines.length,
+        message: 'No quedan líneas por ejecutar: el trabajo estaba terminado.',
+        clearError: true,
+      );
+      return;
+    }
+    ProjectFile? existing;
+    if (projectId != null) {
+      existing = await db.projectById(projectId);
+    }
 
     try {
       await db.upsertProject(
@@ -205,12 +282,14 @@ class ExecutionController extends Notifier<ExecutionUiState> {
           id: _projectId!,
           name:
               fileName ??
+              existing?.name ??
               'Trabajo ${now.day}/${now.month} '
                   '${now.hour.toString().padLeft(2, '0')}:'
                   '${now.minute.toString().padLeft(2, '0')}',
           profileId: profile?.id ?? '',
           gcode: source,
           status: ProjectStatus.running,
+          resume: existing?.resume,
           updatedAt: now,
         ),
       );
@@ -221,7 +300,10 @@ class ExecutionController extends Notifier<ExecutionUiState> {
 
     _attach(client);
     try {
-      await client.streamProgram(sendLines);
+      await client.streamProgram(
+        sendLines.sublist(startIndex),
+        startLine: startIndex,
+      );
     } on Object catch (error) {
       _fail('No se pudo iniciar el envío: $error');
       return;
@@ -229,14 +311,28 @@ class ExecutionController extends Notifier<ExecutionUiState> {
 
     state = ExecutionUiState(
       status: ExecutionStatus.running,
+      executedLine: resumeFromLine == null ? null : resumeFromLine - 1,
       totalLines: sourceLines.length,
       sentLines: sendLines.length,
       compensations: compensated.total,
       projectId: _projectId,
-      message: compensated.total > 0
-          ? 'Ejecutando con ${compensated.total} compensaciones de holgura.'
-          : 'Ejecutando.',
+      message: resumeFromLine == null
+          ? (compensated.total > 0
+                ? 'Ejecutando con ${compensated.total} compensaciones de '
+                      'holgura.'
+                : 'Ejecutando.')
+          : 'Reanudado desde la línea ${resumeFromLine + 1}.',
     );
+  }
+
+  /// Primer índice de [sendMap] cuya línea de origen es >= [line].
+  static int _firstSendIndexAt(int line, List<int> sendMap) {
+    for (int i = 0; i < sendMap.length; i++) {
+      if (sendMap[i] >= line) {
+        return i;
+      }
+    }
+    return sendMap.length;
   }
 
   void _attach(GrblWorkerClient client) {
@@ -368,6 +464,109 @@ class ExecutionController extends Notifier<ExecutionUiState> {
     } on Object catch (error) {
       _fail('No se pudo reanudar: $error');
     }
+  }
+
+  /// Tolerancia de posición (mm) para aceptar un reinicio desde el punto guardado.
+  static const double restartPositionToleranceMm = 1.0;
+
+  /// Reinicia el trabajo guardado desde su última línea.
+  ///
+  /// Verifica `$G`/`$#` (SEG-05) y que la máquina esté en el punto guardado. El
+  /// programa se recarga en el visor y se envía **desde** la línea guardada, sin
+  /// repetir el tramo ya ejecutado.
+  Future<void> restartFromSaved() async {
+    final GrblWorkerClient? client = _client;
+    if (client == null) {
+      _fail('El puerto serial no está disponible.');
+      return;
+    }
+    final ConnectionUiState connection = ref.read(connectionControllerProvider);
+    if (!connection.isConnected) {
+      _fail('Conecta la máquina antes de reanudar.');
+      return;
+    }
+    if (connection.machineState != MachineState.idle) {
+      _fail(
+        'La máquina está en ${connection.machineState.label}: espera a Idle '
+        'para reanudar.',
+      );
+      return;
+    }
+
+    final ProjectFile? project = await ref.read(
+      resumableProjectProvider.future,
+    );
+    final ResumeState? resumeState = project?.resume;
+    if (project == null || resumeState == null) {
+      _fail('No hay ningún trabajo guardado con punto de reanudación.');
+      return;
+    }
+
+    try {
+      if (resumeState.parserState.isNotEmpty) {
+        final ParserState saved = ParserState.parse(resumeState.parserState);
+        final ParserState current = await client.readParserState(direct: true);
+        if (!saved.isCompatibleWith(current)) {
+          _fail(
+            'El estado modal actual (${current.words.join(' ')}) no coincide '
+            'con el guardado (${saved.words.join(' ')}).',
+          );
+          return;
+        }
+      }
+      if (resumeState.offsets != null) {
+        final WorkOffsets current = await client.readOffsets(direct: true);
+        if (!resumeState.offsets!.matches(current)) {
+          _fail(
+            'Los offsets de coordenadas cambiaron desde la pausa: reiniciar '
+            'movería la pieza a otro sitio.',
+          );
+          return;
+        }
+      }
+    } on Object catch (error) {
+      _fail('No se pudo verificar el estado de la máquina: $error');
+      return;
+    }
+
+    final List<double> target = resumeState.workPosition;
+    final List<double>? actual = connection.workPosition;
+    if (target.length >= 2 && actual != null && actual.length >= 2) {
+      final double distance = _distance2d(target, actual);
+      if (distance > restartPositionToleranceMm) {
+        final String point = target
+            .take(2)
+            .map((double value) => value.toStringAsFixed(2))
+            .join(', ');
+        _fail(
+          'La máquina está a ${distance.toStringAsFixed(1)} mm del punto '
+          'guardado ($point). Usa «Llevar al punto guardado» antes de reanudar.',
+        );
+        return;
+      }
+    }
+
+    final GcodeProgram program = const GcodeInterpreter().parse(project.gcode);
+    if (program.isEmpty) {
+      _fail('El trabajo guardado no tiene movimientos que ejecutar.');
+      return;
+    }
+    ref
+        .read(viewerControllerProvider.notifier)
+        .loadText(project.gcode, fileName: project.name);
+    await start(
+      program: program,
+      source: project.gcode,
+      fileName: project.name,
+      resumeFromLine: resumeState.lineIndex,
+      projectId: project.id,
+    );
+  }
+
+  static double _distance2d(List<double> a, List<double> b) {
+    final double dx = a[0] - b[0];
+    final double dy = a[1] - b[1];
+    return math.sqrt(dx * dx + dy * dy);
   }
 
   /// Detiene el trabajo (pausa + persistencia + soft reset).

@@ -189,35 +189,52 @@ class CalibrationController extends Notifier<CalibrationUiState> {
   ///
   /// Es un movimiento real: la UI debe confirmarlo. Se calcula el delta desde la
   /// posición de trabajo actual (`WPos`), nunca con `G92`.
-  Future<void> goToWorkZero({bool includeZ = false}) async {
+  Future<void> goToWorkZero({bool includeZ = false}) {
+    return jogToWorkPosition(
+      const <double>[0, 0, 0],
+      includeZ: includeZ,
+      label: 'al cero de trabajo',
+    );
+  }
+
+  /// Desplaza la máquina a [target] en coordenadas de trabajo con `$J=`.
+  ///
+  /// Se usa para volver al punto guardado antes de reanudar un trabajo; el delta
+  /// sale de `WPos`, nunca de `G92`.
+  Future<void> jogToWorkPosition(
+    List<double> target, {
+    bool includeZ = false,
+    String label = 'al punto indicado',
+  }) async {
     final GrblWorkerClient? client = _clientOrNull;
     final ConnectionUiState connection = ref.read(connectionControllerProvider);
     if (!_isConnected || client == null) {
-      state = state.copyWith(error: 'Conecta la máquina para moverte al cero.');
+      state = state.copyWith(error: 'Conecta la máquina para moverte.');
       return;
     }
     if (connection.machineState != MachineState.idle) {
       state = state.copyWith(
         error:
-            'La máquina debe estar en Idle para ir al cero '
+            'La máquina debe estar en Idle para moverse '
             '(estado ${connection.machineState.label}).',
       );
       return;
     }
     final List<double>? position = connection.workPosition;
-    if (position == null || position.length < 2) {
+    if (position == null || position.length < 2 || target.length < 2) {
       state = state.copyWith(
         error: 'Sin posición de trabajo: espera a la telemetría.',
       );
       return;
     }
     final Map<MachineAxis, double> values = <MachineAxis, double>{
-      MachineAxis.x: -position[0],
-      MachineAxis.y: -position[1],
-      if (includeZ && position.length >= 3) MachineAxis.z: -position[2],
+      MachineAxis.x: target[0] - position[0],
+      MachineAxis.y: target[1] - position[1],
+      if (includeZ && target.length >= 3 && position.length >= 3)
+        MachineAxis.z: target[2] - position[2],
     }..removeWhere((MachineAxis axis, double value) => value.abs() < 1e-6);
     if (values.isEmpty) {
-      state = state.copyWith(message: 'La máquina ya está en el cero.');
+      state = state.copyWith(message: 'La máquina ya está en el destino.');
       return;
     }
 
@@ -226,13 +243,10 @@ class CalibrationController extends Notifier<CalibrationUiState> {
       await client.jog(values: values, feedMmPerMin: state.jogFeedMmMin);
       state = state.copyWith(
         isBusy: false,
-        message: 'Yendo al cero de trabajo a ${state.jogFeedMmMin} mm/min.',
+        message: 'Moviendo $label a ${state.jogFeedMmMin} mm/min.',
       );
     } on Object catch (error) {
-      state = state.copyWith(
-        isBusy: false,
-        error: 'No se pudo ir al cero: $error',
-      );
+      state = state.copyWith(isBusy: false, error: 'No se pudo mover: $error');
     }
   }
 
