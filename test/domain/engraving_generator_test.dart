@@ -136,6 +136,26 @@ void main() {
     expect(normal.gcode, isNot(inverted.gcode));
   });
 
+  test('la vista previa muestra las celdas que se queman', () {
+    final EngravingResult result = generator.generate(
+      _job(
+        _halfBlack(20, 20),
+        settings: const EngravingSettings(widthMm: 20, pixelMm: 1),
+      ),
+    );
+
+    expect(result.previewPng, isNotEmpty);
+    // Firma PNG.
+    expect(result.previewPng.sublist(0, 4), <int>[0x89, 0x50, 0x4E, 0x47]);
+
+    final img.Image preview = img.decodeImage(result.previewPng)!;
+    expect(preview.width, 20);
+    expect(preview.height, 20);
+    // Mitad izquierda quemada (negro), derecha intacta (blanco).
+    expect(preview.getPixel(0, 0).r.toInt(), 0);
+    expect(preview.getPixel(19, 19).r.toInt(), 255);
+  });
+
   test('rechaza una rejilla desmesurada', () {
     expect(
       () => generator.generate(

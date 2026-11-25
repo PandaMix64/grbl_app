@@ -111,7 +111,8 @@ class EngravingJob {
   final EngravingSettings settings;
 }
 
-/// Resultado del grabado: G-code listo para el visor y estadísticas.
+/// Resultado del grabado: G-code listo para el visor, estadísticas y vista
+/// previa del material tal y como quedará.
 class EngravingResult {
   const EngravingResult({
     required this.gcode,
@@ -122,6 +123,7 @@ class EngravingResult {
     required this.litCells,
     required this.mode,
     required this.maxPower,
+    required this.previewPng,
   });
 
   final String gcode;
@@ -134,6 +136,10 @@ class EngravingResult {
   final int litCells;
   final EngravingMode mode;
   final int maxPower;
+
+  /// PNG de una celda por píxel: negro donde el láser quema al máximo y blanco
+  /// donde no actúa. Es el resultado real, no la foto original.
+  final Uint8List previewPng;
 
   int get lineCount => gcode.split('\n').length;
 
@@ -223,7 +229,26 @@ class EngravingGenerator {
       litCells: lit,
       mode: settings.mode,
       maxPower: settings.maxPower,
+      previewPng: _previewPng(power, settings.maxPower),
     );
+  }
+
+  /// Imagen del resultado: una celda = un píxel, con el material «quemado» en
+  /// negro y el resto en blanco.
+  Uint8List _previewPng(List<List<int>> power, int maxPower) {
+    final int rows = power.length;
+    final int columns = rows == 0 ? 0 : power.first.length;
+    final img.Image preview = img.Image(width: columns, height: rows);
+    for (int r = 0; r < rows; r++) {
+      for (int c = 0; c < columns; c++) {
+        final double ratio = maxPower <= 0
+            ? 0
+            : (power[r][c] / maxPower).clamp(0.0, 1.0);
+        final int shade = (255 * (1 - ratio)).round();
+        preview.setPixelRgb(c, r, shade, shade, shade);
+      }
+    }
+    return Uint8List.fromList(img.encodePng(preview));
   }
 
   /// Media de luminancia (0 = negro, 1 = blanco) de cada celda.

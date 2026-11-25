@@ -9,6 +9,53 @@ import '../../domain/entities/machine_profile.dart';
 import '../../domain/services/engraving_generator.dart';
 import 'cam_controller.dart';
 
+/// Vista previa del grabado: una celda por píxel, tal y como quedará el material.
+class _EngravingPreview extends StatelessWidget {
+  const _EngravingPreview({required this.result});
+
+  final EngravingResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Center(
+          child: Container(
+            width: 420,
+            height: 300,
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              // Fondo claro: el grabado se ve como sobre la pieza.
+              color: const Color(0xFFF5F2EA),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: theme.colorScheme.outlineVariant.withValues(alpha: 0.6),
+              ),
+            ),
+            child: Image.memory(
+              result.previewPng,
+              fit: BoxFit.contain,
+              filterQuality: FilterQuality.none,
+              gaplessPlayback: true,
+              semanticLabel: 'Vista previa del grabado',
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Center(
+          child: Text(
+            'Vista previa del resultado: 1 celda = 1 píxel · '
+            '${result.columns} × ${result.rows}',
+            style: theme.textTheme.labelSmall,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// Tarjeta con icono y título.
 class _Panel extends StatelessWidget {
   const _Panel({required this.icon, required this.title, required this.child});
@@ -375,6 +422,8 @@ class _CamPageState extends ConsumerState<CamPage> {
                       style: theme.textTheme.bodySmall,
                     )
                   else ...<Widget>[
+                    _EngravingPreview(result: state.result!),
+                    const SizedBox(height: 12),
                     Text(
                       'Tamaño: '
                       '${state.result!.widthMm.toStringAsFixed(1)} × '
