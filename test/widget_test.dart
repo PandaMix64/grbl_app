@@ -96,6 +96,14 @@ void main() {
     expect(find.text('Relieve'), findsOneWidget);
     expect(find.text('Parámetros de grabado'), findsOneWidget);
     expect(find.textContaining('Generar'), findsWidgets);
+
+    await tester.tap(find.text('Trazado').first);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Trazado · Plóter'), findsOneWidget);
+    expect(find.text('Rutas vectoriales'), findsOneWidget);
+    expect(find.text('Bordado raster'), findsOneWidget);
   });
 
   testWidgets('el visor carga el ejemplo y dibuja el lienzo', (

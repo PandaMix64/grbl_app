@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import '../features/calibration/calibration_page.dart';
 import '../features/cam/cam_page.dart';
 import '../features/home/home_page.dart';
+import '../features/plot/plot_page.dart';
 import '../features/viewer/viewer_page.dart';
 import 'widgets/app_top_bar.dart';
 
@@ -37,6 +38,11 @@ class _HomeShellState extends State<HomeShell> {
       label: 'Visor',
       icon: Icons.view_in_ar_outlined,
       selectedIcon: Icons.view_in_ar,
+    ),
+    _Destination(
+      label: 'Trazado',
+      icon: Icons.draw_outlined,
+      selectedIcon: Icons.draw,
     ),
     _Destination(
       label: 'CAM',
@@ -121,6 +127,7 @@ class _ModuleRouter extends StatelessWidget {
       0 => const HomePage(),
       1 => const CalibrationPage(),
       2 => const ViewerPage(),
+      3 => const PlotPage(),
       _ => const CamPage(),
     };
   }
