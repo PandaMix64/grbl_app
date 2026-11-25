@@ -847,6 +847,16 @@ un móvil real quedó **pendiente**: HyperOS exige activar «Instalar por USB»
 descriptor), icono de la app (sigue el de la plantilla), builds Linux/macOS e isolate
 de parseo (R-17).
 
+**Trazabilidad (commits de S-18):**
+
+| Hash | Commit |
+| :--- | :--- |
+| `0212231` | `build(android): migra a gradle 9 y agp 9 con el plugin de serie parcheado` |
+| `4797280` | `feat(conexion): bloquea la serie fuera de escritorio con un aviso` |
+| `1cf05b1` | `docs: guia de empaquetado y bitacora de la sesion` |
+
+Recuperación de la sesión: `git log --oneline --grep="S-18"`.
+
 ---
 
 ## 5. Decisiones de arquitectura (ADR resumidas)
