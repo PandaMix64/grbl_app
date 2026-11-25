@@ -14,7 +14,7 @@ Flutter + Material Design 3, Clean Architecture con gestión de estado reactiva,
 | Fase 1 — Núcleo y Serial | ✅ Cerrada |
 | Fase 2 — Calibración | ✅ Cerrada |
 | Fase 3 — Visor 3D | 🟡 En curso (visor y ejecución listos) |
-| Fase 4 — Generador CAM | 🟡 En curso (grabado y contornos) |
+| Fase 4 — Generador CAM | ✅ Cerrada (grabado, contornos y relieve) |
 | Fase 5 — Optimización y empaquetado | ⬜ Pendiente |
 
 El detalle de tareas, decisiones (ADR), riesgos y bitácora de cada sesión vive en **[`ESTADO_PROYECTO.md`](ESTADO_PROYECTO.md)**. Empieza por ahí si retomas el proyecto.
@@ -153,6 +153,11 @@ permite pausar, reanudar y detener:
 - Vectoriza la imagen (con islas y huecos), simplifica los polígonos (Douglas–Peucker) y genera el corte.
 - **Láser**: una pasada con el haz conmutado; **husillo** (`M3`): pasadas en Z hasta la profundidad final.
 - **Pestañas** de sujeción: suben la Z (o apagan el haz) en tramos repartidos por el perímetro.
+
+**Relieve** (2.5D, fresadora)
+- La imagen se cuantiza en niveles de profundidad (claro = sin fresar, oscuro = profundidad máxima).
+- Cada nivel se fresa por bandas con pasadas hasta su cota: escalera de profundidad predecible.
+- Vista previa del **mapa de altura**; requiere perfil de fresadora y que la profundidad quepa en su recorrido Z.
 
 Común:
 - La conversión corre en un **isolate** con topes de celdas/puntos; el grabado exige perfil láser y todo debe caber en el

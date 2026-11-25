@@ -156,6 +156,9 @@ herramienta montada.
 | 12.8 | Cambiar a **Contorno** con herramienta husillo y crear un perfil de fresadora | La vista previa muestra los polígonos; el resumen indica vueltas, puntos y pasadas |
 | 12.9 | Ejecutar el contorno con `cutZ` mayor que una pasada | Baja por niveles hasta la profundidad final y sube a `Z` segura entre vueltas |
 | 12.10 | Añadir 2–3 pestañas y cortar en madera blanda | El perímetro queda sujeto por las pestañas; en láser esas zonas no se marcan |
+| 12.11 | Cambiar a **Relieve** con un perfil de fresadora y una imagen en escala de grises | Vista previa del mapa de altura y resumen con niveles y % fresado |
+| 12.12 | Fresar el relieve en un taco de madera blanda | Baja por niveles y pasadas hasta la profundidad de cada banda, subiendo a Z segura entre tramos |
+| 12.13 | Intentar relieve con un perfil láser | Se rechaza con el motivo (requiere fresadora y Z) |
 
 ---
 

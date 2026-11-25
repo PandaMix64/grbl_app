@@ -35,7 +35,7 @@
 | **Fase 2: Calibración** | Jogging, pasos/mm, parámetros `$`, perfiles y *backlash* | ✅ **Cerrada** | Jogging, parámetros, pasos/mm, perfiles, holgura, homing y origen |
 | **Fase 3: Visor 3D** | Renderizado, interpretación de G-code, pausa/detención y reanudación segura | 🟡 **En curso (~45 %)** | Intérprete, proyección, pintor y visor con telemetría listos; falta ejecución y pausa |
 | **Fase 3: Visor 3D** | Renderizado, interpretación de G-code, pausa/detención y reanudación segura | ⬜ Pendiente | `ResumeState` y `MotionSegment` ya existen; falta persistencia y render |
-| **Fase 4: Generador CAM** | Imagen → G-code (vectorización, dithering, relieve 2.5D) | 🟡 En curso (grabado y contornos hechos) | Modo láser requiere `$32` (P1-1) |
+| **Fase 4: Generador CAM** | Imagen → G-code (vectorización, dithering, relieve 2.5D) | ✅ Cerrada (grabado, contornos con pestañas y relieve) | Modo láser requiere `$32` (P1-1) |
 | **Fase 5: Optimización y Empaquetado** | Rendimiento, atajos, builds Windows/Linux/macOS/Android | ⬜ Pendiente | — |
 
 Leyenda: 🟡 en curso · ✅ cerrada · ⬜ pendiente · 🔴 bloqueada
@@ -684,6 +684,45 @@ Recuperación de la sesión: `git log --oneline --grep="S-14"`.
 
 ---
 
+### S-15 — 2026-11-24 · Fase 4 cerrada: relieve 2.5D (M4.2)
+
+**Alcance:** último bloque del CAM: mapa de altura cuantizado en niveles y fresado por bandas de profundidad con el husillo, con vista previa del relieve.
+
+**Entregado**
+
+| # | Cambio | Archivo(s) | Estado |
+| :--- | :--- | :--- | :--- |
+| 1 | `ReliefGenerator`: luminancia → nivel (0..N) con muestreo por celda | `lib/domain/services/relief_generator.dart` | ✅ |
+| 2 | Fresado por bandas: cada nivel corta las celdas de ese nivel o más profundas | `relief_generator.dart` | ✅ |
+| 3 | Pasadas dentro de cada nivel (`passDepth`) hasta su cota | `relief_generator.dart` | ✅ |
+| 4 | Vista previa del mapa de altura (oscuro = más profundo) | `relief_generator.dart`, `cam_page.dart` | ✅ |
+| 5 | Tercera operación del CAM (**Grabado / Contorno / Relieve**) con panel propio | `cam_controller.dart`, `cam_page.dart` | ✅ |
+| 6 | Validaciones: niveles 2–16, profundidad ≤ recorrido Z, perfil de fresadora | `relief_generator.dart`, `cam_controller.dart` | ✅ |
+| 7 | 9 pruebas nuevas (236 en verde, 1 saltada) | `test/domain/relief_generator_test.dart`, `test/features/cam_controller_test.dart`, `test/widget_test.dart` | ✅ |
+
+**Verificaciones ejecutadas:** `dart format --set-exit-if-changed` → 0 cambios · `flutter analyze` → *No issues found* · `flutter test` → **236 en verde, 1 saltada**.
+
+**Decisiones de diseño**
+
+- **Bandas acumulativas**: la celda de nivel `L` se fresa en todos los niveles `1..L`, de modo que el resultado es una escalera de profundidad sin un algoritmo de desbaste complejo.
+- La profundidad de cada nivel se reparte en pasadas de `passDepth` (nunca se baja más de golpe).
+- El relieve es **solo con fresadora**: con láser el equivalente ya existe (grabado en escala de grises).
+- Los avisos son de una línea: si el conteo supera 400 000 líneas se rechaza y se sugiere subir los mm/celda.
+
+**Decisiones tomadas:** ADR-041, ADR-042.
+
+**Trazabilidad (commits de S-15):**
+
+| Hash | Commit |
+| :--- | :--- |
+| `75a3786` | `feat(cam): relieve 2.5D por niveles de profundidad` |
+
+Recuperación de la sesión: `git log --oneline --grep="S-15"`.
+
+**Abierto al cierre:** el relieve es escalonado (no hay desbaste continuo ni acabado), y las pestañas no aplican al relieve. **Fase 4 cerrada**: grabado, contornos con pestañas y relieve.
+
+---
+
 ## 5. Decisiones de arquitectura (ADR resumidas)
 
 | ID | Decisión | Motivo | Consecuencia |
@@ -728,6 +767,8 @@ Recuperación de la sesión: `git log --oneline --grep="S-14"`.
 | ADR-038 | Barra de ejecución compacta superpuesta al lienzo | La tarjeta completa robaba altura al viewport, que es lo que se mira | Iconos + progreso fino + una línea de aviso; «Centrar trazado» se integra en ella |
 | ADR-039 | Contornos por aristas de píxel + Douglas–Peucker (sin potrace ni dependencias) | Se necesitaba detectar islas y huecos con resultados deterministas y testeables | Bucles cerrados con simplificación en mm; tope de celdas y puntos |
 | ADR-040 | Una sola operación CAM activa (Grabado o Contorno) | Mostrar una vista previa de grabado junto a parámetros de corte confunde y es peligroso | Cambiar de operación descarta el resultado anterior |
+| ADR-041 | Relieve 2.5D por bandas acumulativas con pasadas por nivel | Un desbaste continuo exige algoritmos de offset que no aportan en esta fase | Escalera de profundidad predecible y testeable; celda de nivel L se corta en 1..L |
+| ADR-042 | El relieve exige perfil de fresadora | Usa `M3` y `Z`; con láser el equivalente es el grabado en escala de grises | Error explicativo si el perfil no es de fresadora |
 
 ---
 
@@ -773,7 +814,7 @@ Recuperación de la sesión: `git log --oneline --grep="S-14"`.
 ## 8. Próximos pasos (orden estricto)
 
 1. **Completar la verificación en banco**: 5.6 (reanudar sin repetir tramo), 5.7 (detener), §6 (divergencia de reanudación), reinicio del trabajo guardado (§11), CAM (§12) y robustez §7–§9.
-2. **Fase 4 — relieve 2.5D**: mapa de altura por niveles (último bloque del CAM) y pestañas en el grabado raster.
+2. **Fase 5 — Optimización y empaquetado**: parseo de G-code en isolate (R-17), atajos de escritorio, builds Linux/macOS/Android y release de Windows.
 3. Push al remoto para ejecutar el CI (R-08).
 
 
