@@ -78,7 +78,11 @@ void main() {
 
     await tester.tap(find.text('Calibración').first);
     await tester.pump();
+    await tester.pump();
 
-    expect(find.text('Pendiente — Fase 2'), findsOneWidget);
+    expect(find.text('Control manual (jog)'), findsOneWidget);
+    expect(find.text('Parámetros de GRBL'), findsOneWidget);
+    expect(find.text('Pasos por milímetro'), findsOneWidget);
+    expect(find.text('Perfiles de máquina'), findsOneWidget);
   });
 }
