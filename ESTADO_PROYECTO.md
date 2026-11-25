@@ -415,7 +415,7 @@ Recuperación de la sesión: `git log --oneline --grep="S-07"`.
 | 10 | `confirmAction` movido a `core/widgets` para reutilizarlo | `lib/core/widgets/confirm_dialog.dart` | ✅ |
 | 11 | 10 pruebas nuevas (187 en verde, 1 saltada) + `ackDelay` y `Hold` realista en el emulador | `test/features/execution_controller_test.dart`, `test/helpers/fake_serial_port.dart`, `test/widget_test.dart` | ✅ |
 
-**Verificaciones ejecutadas:** `dart format .` → 0 cambios · `flutter analyze` → *No issues found* · `flutter test` → **187 en verde, 1 saltada** (`flutter_libserialport` fuera de un build de la app).
+**Verificaciones ejecutadas:** `dart format .` → 0 cambios · `flutter analyze` → *No issues found* · `flutter test` → **187 en verde, 1 saltada** (`flutter_libserialport` fuera de un build de la app) · `flutter build windows --debug` → **OK**, con `serialport.dll`, `flutter_libserialport_plugin.dll` y `sqlite3.dll` en `build/windows/x64/runner/Debug` (el camino FFI carga; R-10 queda listo para la prueba en banco).
 
 **Decisiones de diseño**
 
@@ -500,7 +500,7 @@ Recuperación de la sesión: `git log --oneline --grep="S-08"`.
 | R-07 | `LibSerialPortRepository` sin implementar: la app aún no habla con hardware | Fase 1 detenida hasta implementarlo | Implementado en S-03 (FFI + worker con handshake); queda la prueba en banco (R-10) | 🟢 Cerrado |
 | R-08 | CI escrito pero nunca ejecutado en GitHub | Errores de entorno no detectados | Primer push y revisión del run | 🟡 Abierto |
 | R-09 | `GrblSerialService` mezcla transporte y política de seguridad | Mantenibilidad | Extraer `SafetyController` antes de la UI de calibración | 🟡 Vigilado |
-| R-10 | El camino FFI (DLL + handshake) no se ha ejecutado contra hardware ni en un build de escritorio | Fallos de plataforma no detectados hasta la primera prueba real | Pospuesto por decisión del usuario: se hará con la UI completa | 🟡 Pospuesto |
+| R-10 | El camino FFI (DLL + handshake) no se ha ejecutado contra hardware ni en un build de escritorio | Fallos de plataforma no detectados hasta la primera prueba real | Build de escritorio verificado en S-08 (DLL presentes); falta la pasada con Arduino siguiendo `docs/prueba_banco.md` | 🟡 Listo para probar |
 | R-11 | Sin reconexión automática tras una pérdida de USB | Trabajo interrumpido y estado perdido | Detectar error de puerto, marcar `Disconnected` y exigir reconexión con handshake | 🟡 Vigilado |
 | R-12 | La persistencia (Drift) aún no existe: `persistProgress` solo puede confirmar de memoria | El ack de SEG-03 no garantiza durabilidad todavía | Cerrado en S-04: `ProjectRepository.persistAndConfirm` escribe en SQLite antes de confirmar | ✅ Cerrado |
 | R-13 | La conexión desde la UI se cubre en tests de controlador, no con un widget test que pulse «Conectar» | Un fallo de cableado UI ↔ controlador no se detectaría en CI | Prueba E2E en build con hardware (R-10) y revisión manual al integrar la Fase 2 | 🟡 Vigilado |
