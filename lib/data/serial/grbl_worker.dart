@@ -50,6 +50,7 @@ class GrblWorker {
   ReceivePort? _inbox;
   StreamSubscription<StatusReport>? _statusSub;
   StreamSubscription<String>? _messageSub;
+  StreamSubscription<int>? _progressSub;
   Completer<void>? _persistAck;
 
   /// Servicio interno, expuesto para pruebas en proceso.
@@ -74,6 +75,12 @@ class GrblWorker {
       toClient.send(<String, Object?>{
         GrblWorkerKey.event: GrblWorkerEvent.message,
         GrblWorkerKey.message: message,
+      });
+    });
+    _progressSub = _service.programProgress.listen((int line) {
+      toClient.send(<String, Object?>{
+        GrblWorkerKey.event: GrblWorkerEvent.progress,
+        GrblWorkerKey.startLine: line,
       });
     });
   }
@@ -131,6 +138,27 @@ class GrblWorker {
           }
           _service.streamGcode(blocks.whereType<String>());
           _reply(id);
+        case GrblWorkerCommand.streamProgram:
+          final Object? programLines = raw[GrblWorkerKey.blocks];
+          if (programLines is! List) {
+            throw const GrblWorkerException(
+              'El comando streamProgram requiere la lista de líneas.',
+            );
+          }
+          _service.streamProgram(
+            programLines.whereType<String>().toList(),
+            startLine: (raw[GrblWorkerKey.startLine] as num?)?.toInt() ?? 0,
+          );
+          _reply(id);
+        case GrblWorkerCommand.pauseJob:
+          final StatusReport report = await _service.pauseJob();
+          await _requestPersistence(id);
+          _reply(id, <String, Object?>{GrblWorkerKey.line: report.raw});
+        case GrblWorkerCommand.resumeJob:
+          final StatusReport resumed = await _service.resumeProgram(
+            restartTool: raw[GrblWorkerKey.toolOn] as bool? ?? true,
+          );
+          _reply(id, <String, Object?>{GrblWorkerKey.line: resumed.raw});
         case GrblWorkerCommand.pause:
           final StatusReport report = await _service.pauseSafely();
           _reply(id, <String, Object?>{GrblWorkerKey.line: report.raw});
@@ -218,10 +246,14 @@ class GrblWorker {
           final GrblSettings settings = await _service.readSettings();
           _reply(id, settings.toJson());
         case GrblWorkerCommand.readParserState:
-          final ParserState state = await _service.readParserState();
+          final ParserState state = await _service.readParserState(
+            direct: raw[GrblWorkerKey.direct] as bool? ?? false,
+          );
           _reply(id, state.toJson());
         case GrblWorkerCommand.readOffsets:
-          final WorkOffsets offsets = await _service.readOffsets();
+          final WorkOffsets offsets = await _service.readOffsets(
+            direct: raw[GrblWorkerKey.direct] as bool? ?? false,
+          );
           _reply(id, offsets.toJson());
         case GrblWorkerCommand.stop:
           await _stopWithPersistence(id);
@@ -244,35 +276,54 @@ class GrblWorker {
 
   /// Pausa, exige la confirmación de guardado y solo entonces resetea.
   Future<void> _stopWithPersistence(Object? id) async {
-    ParserState? parserState;
     await _service.stopJob(
-      persistProgress: (StatusReport? report) async {
-        // En Hold la máquina está quieta, así que `$G` es legible: el estado
-        // modal es imprescindible para reanudar con seguridad (SEG-05).
-        try {
-          parserState = await _service.readParserState();
-        } on GrblProtocolException {
-          parserState = null;
-        }
-        final Completer<void> ack = Completer<void>();
-        _persistAck = ack;
-        toClient.send(<String, Object?>{
-          GrblWorkerKey.event: GrblWorkerEvent.persistRequest,
-          GrblWorkerKey.id: id,
-          GrblWorkerKey.line: report?.raw,
-          GrblWorkerKey.parserState: parserState?.toJson(),
-        });
-        await ack.future.timeout(
-          persistTimeout,
-          onTimeout: () => throw const GrblSafetyException(
-            'El cliente no confirmó el guardado del progreso: no se envía el '
-            'soft reset y la máquina permanece en Hold con la herramienta '
-            'apagada.',
-          ),
-        );
-      },
+      persistProgress: (StatusReport? report) => _requestPersistence(id),
     );
+    _service.cancelProgram();
     _reply(id);
+  }
+
+  /// Pide al cliente que guarde el progreso y espera su confirmación.
+  ///
+  /// Lee `$G` y `$#` con la máquina en `Hold` (quieta) para que el punto de
+  /// reanudación incluya el estado modal y los offsets (SEG-05).
+  Future<void> _requestPersistence(Object? id) async {
+    ParserState? parserState;
+    WorkOffsets? offsets;
+    try {
+      parserState = await _service.readParserState(
+        direct: true,
+        timeout: const Duration(milliseconds: 900),
+      );
+    } on GrblProtocolException {
+      parserState = null;
+    }
+    try {
+      offsets = await _service.readOffsets(
+        direct: true,
+        timeout: const Duration(milliseconds: 900),
+      );
+    } on GrblProtocolException {
+      offsets = null;
+    }
+
+    final Completer<void> ack = Completer<void>();
+    _persistAck = ack;
+    toClient.send(<String, Object?>{
+      GrblWorkerKey.event: GrblWorkerEvent.persistRequest,
+      GrblWorkerKey.id: id,
+      GrblWorkerKey.line: _service.lastStatus?.raw,
+      GrblWorkerKey.parserState: parserState?.toJson(),
+      GrblWorkerKey.offsets: offsets?.toJson(),
+    });
+    await ack.future.timeout(
+      persistTimeout,
+      onTimeout: () => throw const GrblSafetyException(
+        'El cliente no confirmó el guardado del progreso: no se envía el '
+        'soft reset y la máquina permanece en Hold con la herramienta '
+        'apagada.',
+      ),
+    );
   }
 
   void _reply(Object? id, [Map<String, Object?>? data]) {
@@ -298,6 +349,7 @@ class GrblWorker {
   Future<void> dispose() async {
     await _statusSub?.cancel();
     await _messageSub?.cancel();
+    await _progressSub?.cancel();
     await _service.dispose();
     _inbox?.close();
   }

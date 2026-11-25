@@ -22,6 +22,7 @@ class WorkerPersistRequest {
     required this.confirmPersisted,
     this.status,
     this.parserState,
+    this.offsets,
   });
 
   final Object? id;
@@ -31,6 +32,9 @@ class WorkerPersistRequest {
 
   /// Estado modal leído con `$G` dentro de la pausa; `null` si no se pudo leer.
   final ParserState? parserState;
+
+  /// Offsets leídos con `$#` dentro de la pausa; `null` si no se pudieron leer.
+  final WorkOffsets? offsets;
 
   /// Confirma que el progreso quedó persistido.
   final void Function() confirmPersisted;
@@ -79,6 +83,7 @@ class GrblWorkerClient {
       StreamController<String>.broadcast();
   final StreamController<WorkerPersistRequest> _persistRequests =
       StreamController<WorkerPersistRequest>.broadcast();
+  final StreamController<int> _progress = StreamController<int>.broadcast();
   final Map<int, Completer<Map<String, Object?>>> _pending =
       <int, Completer<Map<String, Object?>>>{};
   final Completer<void> _ready = Completer<void>();
@@ -97,6 +102,9 @@ class GrblWorkerClient {
   Stream<StatusReport> get statusReports => _statuses.stream;
   Stream<String> get messages => _messages.stream;
   Stream<WorkerPersistRequest> get persistRequests => _persistRequests.stream;
+
+  /// Progreso del programa: línea de origen confirmada por GRBL.
+  Stream<int> get programProgress => _progress.stream;
   bool get isReady => _toWorker != null;
 
   /// Lanza el worker en un isolate propio con el puerto FFI real.
@@ -167,6 +175,11 @@ class GrblWorkerClient {
             );
           }
         }
+      case GrblWorkerEvent.progress:
+        final Object? progressLine = message[GrblWorkerKey.startLine];
+        if (progressLine is int && !_progress.isClosed) {
+          _progress.add(progressLine);
+        }
       case GrblWorkerEvent.persistRequest:
         final Object? line = message[GrblWorkerKey.line];
         StatusReport? report;
@@ -186,12 +199,18 @@ class GrblWorkerClient {
             parserState = null;
           }
         }
+        final Object? rawOffsets = message[GrblWorkerKey.offsets];
+        WorkOffsets? offsets;
+        if (rawOffsets is Map<String, Object?>) {
+          offsets = WorkOffsets.fromJson(rawOffsets);
+        }
         if (!_persistRequests.isClosed) {
           _persistRequests.add(
             WorkerPersistRequest(
               id: id,
               status: report,
               parserState: parserState,
+              offsets: offsets,
               confirmPersisted: () {
                 _toWorker?.send(<String, Object?>{
                   GrblWorkerKey.command: GrblWorkerCommand.persistDone,
@@ -252,6 +271,32 @@ class GrblWorkerClient {
     GrblWorkerCommand.stream,
     <String, Object?>{GrblWorkerKey.blocks: List<String>.of(blocks)},
   );
+
+  /// Envía un programa y publica progreso por línea de origen confirmada.
+  Future<void> streamProgram(List<String> lines, {int startLine = 0}) {
+    return _send(GrblWorkerCommand.streamProgram, <String, Object?>{
+      GrblWorkerKey.blocks: lines,
+      GrblWorkerKey.startLine: startLine,
+    });
+  }
+
+  /// Pausa segura con persistencia obligatoria del punto de reanudación.
+  Future<StatusReport?> pauseJob() async {
+    final Map<String, Object?> data = await _send(GrblWorkerCommand.pauseJob);
+    final Object? line = data[GrblWorkerKey.line];
+    return line is String ? StatusReport.parse(line) : null;
+  }
+
+  /// Reanuda el programa tras la pausa: reactiva la herramienta (si estaba
+  /// encendida) y envía cycle start, sin reenviar líneas.
+  Future<StatusReport?> resumeJob({bool restartTool = true}) async {
+    final Map<String, Object?> data = await _send(
+      GrblWorkerCommand.resumeJob,
+      <String, Object?>{GrblWorkerKey.toolOn: restartTool},
+    );
+    final Object? line = data[GrblWorkerKey.line];
+    return line is String ? StatusReport.parse(line) : null;
+  }
 
   /// Pausa segura: detiene el movimiento y apaga la herramienta.
   Future<StatusReport?> pause() async {
@@ -321,11 +366,19 @@ class GrblWorkerClient {
   Future<GrblSettings> readSettings() async =>
       GrblSettings.fromJson(await _send(GrblWorkerCommand.readSettings));
 
-  Future<ParserState> readParserState() async =>
-      ParserState.fromJson(await _send(GrblWorkerCommand.readParserState));
+  Future<ParserState> readParserState({bool direct = false}) async =>
+      ParserState.fromJson(
+        await _send(GrblWorkerCommand.readParserState, <String, Object?>{
+          GrblWorkerKey.direct: direct,
+        }),
+      );
 
-  Future<WorkOffsets> readOffsets() async =>
-      WorkOffsets.fromJson(await _send(GrblWorkerCommand.readOffsets));
+  Future<WorkOffsets> readOffsets({bool direct = false}) async =>
+      WorkOffsets.fromJson(
+        await _send(GrblWorkerCommand.readOffsets, <String, Object?>{
+          GrblWorkerKey.direct: direct,
+        }),
+      );
 
   Future<Map<String, Object?>> _send(
     String command, [
@@ -377,6 +430,7 @@ class GrblWorkerClient {
     await _statuses.close();
     await _messages.close();
     await _persistRequests.close();
+    await _progress.close();
   }
 }
 

@@ -34,9 +34,13 @@ class GrblProtocolException implements Exception {
 
 /// Consulta en curso (`$$`, `$G`, `$#`, `$I`) que acumula líneas hasta el `ok`.
 class _LineQuery {
-  _LineQuery({required this.accept});
+  _LineQuery({required this.accept, this.expectLines = true});
 
   final bool Function(String line) accept;
+
+  /// Si es `false`, el `ok` cierra la consulta aunque no haya líneas
+  /// (escrituras de EEPROM).
+  final bool expectLines;
   final List<String> lines = <String>[];
   final Completer<List<String>> completer = Completer<List<String>>();
 }
@@ -71,12 +75,19 @@ class GrblSerialService {
       StreamController<String>.broadcast();
   final StreamController<String> _bannerController =
       StreamController<String>.broadcast();
+  final StreamController<int> _progressController =
+      StreamController<int>.broadcast();
 
   StreamSubscription<String>? _subscription;
   Timer? _pollTimer;
   StatusReport? _lastStatus;
   int _sentBlocks = 0;
   _LineQuery? _query;
+
+  /// Estado del stream de programa (progreso por `ok` confirmados).
+  bool _programActive = false;
+  int _programAcked = 0;
+  int _programStartLine = 0;
 
   /// Telemetría parseada; emite cada `<...>` recibido.
   Stream<StatusReport> get statusReports => _statusController.stream;
@@ -86,6 +97,21 @@ class GrblSerialService {
 
   /// Banner de arranque (`Grbl 1.1h ['$' for help]`), útil tras un reset.
   Stream<String> get banners => _bannerController.stream;
+
+  /// Progreso del programa en curso: línea de origen ya confirmada por GRBL.
+  ///
+  /// Solo se emite mientras hay un programa activo, como máximo cada 10 líneas
+  /// y siempre al vaciarse el búfer.
+  Stream<int> get programProgress => _progressController.stream;
+
+  /// Línea de origen desde la que arrancó el programa actual.
+  int get programStartLine => _programStartLine;
+
+  /// Líneas del programa confirmadas con `ok` desde el inicio del stream.
+  int get acknowledgedProgramLines => _programAcked;
+
+  /// Línea de origen que GRBL ya ha confirmado.
+  int get currentProgramLine => _programStartLine + _programAcked;
 
   /// Último reporte recibido, o `null` si aún no hay telemetría.
   StatusReport? get lastStatus => _lastStatus;
@@ -163,6 +189,38 @@ class GrblSerialService {
     _pump();
   }
 
+  /// Envía un programa y publica el progreso por líneas confirmadas.
+  ///
+  /// [startLine] es la línea de origen de la primera entrada de [lines], de modo
+  /// que el visor puede reanudar e informar del avance real.
+  void streamProgram(List<String> lines, {int startLine = 0}) {
+    _requireConnected();
+    if (lines.isEmpty) {
+      throw ArgumentError('El programa no tiene líneas para enviar.');
+    }
+    _programStartLine = startLine;
+    _programAcked = 0;
+    _programActive = true;
+    _buffer.enqueueAll(lines);
+    _pump();
+  }
+
+  /// Cancela el programa en curso: descarta lo pendiente y deja de contar.
+  ///
+  /// Se usa tras una pausa o una detención, cuando el resto del programa se
+  /// reenviará desde la línea guardada.
+  void cancelProgram() {
+    _buffer.reset();
+    _programActive = false;
+  }
+
+  /// Pausa segura del programa en curso (§3) y deja de contar progreso.
+  Future<StatusReport> pauseJob({Duration? timeout}) async {
+    final StatusReport report = await pauseSafely(timeout: timeout);
+    _programActive = false;
+    return report;
+  }
+
   /// Encola una sola línea (G-code o comando `$`).
   void enqueue(String line) {
     _requireConnected();
@@ -192,6 +250,17 @@ class GrblSerialService {
 
     if (text == 'ok') {
       _buffer.acknowledgeOk();
+      if (_programActive) {
+        _programAcked++;
+        if (_programAcked % 10 == 0 || !_buffer.isBusy) {
+          if (!_progressController.isClosed) {
+            _progressController.add(_programStartLine + _programAcked);
+          }
+        }
+        if (!_buffer.isBusy) {
+          _programActive = false;
+        }
+      }
       _completeQuery();
       _pump();
       return;
@@ -235,6 +304,12 @@ class GrblSerialService {
   void _completeQuery() {
     final _LineQuery? query = _query;
     if (query == null) {
+      return;
+    }
+    // Un `ok` suelto (por ejemplo, el de una línea del programa que estaba en
+    // vuelo al pausar) no debe cerrar una consulta sin respuesta: eso devolvía
+    // `$#` vacío y hacía fallar la reanudación.
+    if (query.expectLines && query.lines.isEmpty) {
       return;
     }
     _query = null;
@@ -332,6 +407,7 @@ class GrblSerialService {
         '${r'$'}${change.key}=${change.value}',
         accept: (String line) => false,
         timeout: timeout,
+        expectLines: false,
       );
       written++;
     }
@@ -361,6 +437,8 @@ class GrblSerialService {
     String command, {
     required bool Function(String line) accept,
     Duration? timeout,
+    bool direct = false,
+    bool expectLines = true,
   }) async {
     _requireConnected();
     if (state.isMoving) {
@@ -373,9 +451,18 @@ class GrblSerialService {
         'Ya hay una consulta de parámetros en curso.',
       );
     }
-    final _LineQuery query = _LineQuery(accept: accept);
+    final _LineQuery query = _LineQuery(
+      accept: accept,
+      expectLines: expectLines,
+    );
     _query = query;
-    enqueue(command);
+    if (direct) {
+      // Escribe al puerto sin pasar por el búfer: imprescindible en `Hold`,
+      // donde las líneas del programa en vuelo no se confirman.
+      _port.writeLine(command);
+    } else {
+      enqueue(command);
+    }
     try {
       return await query.completer.future.timeout(
         timeout ?? _defaultTimeout,
@@ -420,11 +507,15 @@ class GrblSerialService {
   }
 
   /// Lee el estado modal del parser (`$G`).
-  Future<ParserState> readParserState({Duration? timeout}) async {
+  Future<ParserState> readParserState({
+    Duration? timeout,
+    bool direct = false,
+  }) async {
     final List<String> lines = await _request(
       r'$G',
       accept: (String line) => line.startsWith('[GC:'),
       timeout: timeout,
+      direct: direct,
     );
     if (lines.isEmpty) {
       throw const GrblProtocolException(
@@ -435,13 +526,22 @@ class GrblSerialService {
   }
 
   /// Lee los offsets de coordenadas (`$#`).
-  Future<WorkOffsets> readOffsets({Duration? timeout}) async {
+  Future<WorkOffsets> readOffsets({
+    Duration? timeout,
+    bool direct = false,
+  }) async {
     final List<String> lines = await _request(
       r'$#',
       accept: (String line) =>
           line.startsWith('[') && !line.startsWith('[MSG:'),
       timeout: timeout,
+      direct: direct,
     );
+    if (lines.isEmpty) {
+      throw const GrblProtocolException(
+        'GRBL no devolvió los offsets de coordenadas.',
+      );
+    }
     return WorkOffsets.parse(lines);
   }
 
@@ -592,6 +692,43 @@ class GrblSerialService {
     );
   }
 
+  /// Reanuda el programa tras una pausa (§6).
+  ///
+  /// Reactiva la herramienta con `0x9E` (toggle realtime, no encola nada) y
+  /// solo entonces envía `~`, porque GRBL conserva en su búfer los bloques ya
+  /// enviados: reenviarlos duplicaría el trabajo.
+  Future<StatusReport> resumeProgram({
+    bool restartTool = true,
+    Duration? timeout,
+  }) async {
+    _requireConnected();
+    if (state != MachineState.hold) {
+      throw GrblSafetyException(
+        'Solo se reanuda desde Hold (estado ${state.label}).',
+      );
+    }
+    final Duration limit = timeout ?? _defaultTimeout;
+    if (restartTool && _lastStatus != null && !_lastStatus!.isSpindleOn) {
+      _port.writeRealtime(GrblRealtime.spindleStopToggle);
+      await _waitFor(
+        (StatusReport report) =>
+            report.state == MachineState.hold && report.isSpindleOn,
+        timeout: const Duration(seconds: 1),
+        onTimeout:
+            'La herramienta no se reactivó: no se envía cycle start. '
+            'Acciona el paro de emergencia si no puedes apagarla.',
+      );
+    }
+    _port.writeRealtime(GrblRealtime.cycleStart);
+    await _waitFor(
+      (StatusReport report) => report.state == MachineState.run,
+      timeout: limit,
+      onTimeout: 'La máquina no reanudó (estado ${state.label}).',
+    );
+    _programActive = true;
+    return _lastStatus!;
+  }
+
   /// Cancela el jog en curso (§4).
   ///
   /// Si la máquina no está en `Jog`, el comando se ignora y se registra
@@ -675,5 +812,6 @@ class GrblSerialService {
     await _statusController.close();
     await _messagesController.close();
     await _bannerController.close();
+    await _progressController.close();
   }
 }
