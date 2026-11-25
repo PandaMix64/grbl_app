@@ -24,6 +24,16 @@ class LibSerialPortRepository implements SerialPortRepository {
   SerialPortReader? _reader;
   StreamSubscription<Uint8List>? _readerSubscription;
 
+  /// Evita reentrar en `close()` mientras se está cerrando el puerto.
+  bool _closing = false;
+
+  /// Tiempo de espera del hilo lector de `libserialport`.
+  ///
+  /// Es el máximo que puede tardar el isolate lector en salir de `sp_wait`;
+  /// liberar el puerto antes provoca un *use-after-free* nativo.
+  static const int _readerTimeoutMs = 50;
+  static const Duration _readerDrainDelay = Duration(milliseconds: 150);
+
   @override
   bool get isOpen => _port?.isOpen ?? false;
 
@@ -72,14 +82,16 @@ class LibSerialPortRepository implements SerialPortRepository {
       ..parity = SerialPortParity.none
       ..stopBits = 1
       ..setFlowControl(SerialPortFlowControl.none);
-    try {
-      port.config = config;
-    } finally {
-      config.dispose();
-    }
+    // `port.config = config` **transfiere la propiedad**: el puerto guarda la
+    // referencia y la libera en su `dispose()`. Liberarla aquí produce un doble
+    // `free` del `sp_port_config` (en builds debug: `_CrtIsValidHeapPointer`).
+    port.config = config;
 
     _port = port;
-    final SerialPortReader reader = SerialPortReader(port);
+    final SerialPortReader reader = SerialPortReader(
+      port,
+      timeout: _readerTimeoutMs,
+    );
     _reader = reader;
     _readerSubscription = reader.stream.listen(
       _onData,
@@ -95,23 +107,41 @@ class LibSerialPortRepository implements SerialPortRepository {
 
   @override
   Future<void> close() async {
-    await _readerSubscription?.cancel();
-    _readerSubscription = null;
-    _reader?.close();
-    _reader = null;
-
-    final SerialPort? port = _port;
-    _port = null;
-    if (port != null) {
-      try {
-        if (port.isOpen) {
-          port.close();
-        }
-      } finally {
-        port.dispose();
-      }
+    if (_closing) {
+      return;
     }
-    _incoming.clear();
+    _closing = true;
+    try {
+      final StreamSubscription<Uint8List>? subscription = _readerSubscription;
+      _readerSubscription = null;
+      await subscription?.cancel();
+
+      final SerialPortReader? reader = _reader;
+      _reader = null;
+      reader?.close();
+
+      // El isolate del lector puede seguir dentro de `sp_wait` hasta que expire
+      // su timeout. Si liberamos el puerto antes, ese FFI escribe sobre memoria
+      // liberada (assert del CRT / cierre inesperado en debug).
+      if (reader != null) {
+        await Future<void>.delayed(_readerDrainDelay);
+      }
+
+      final SerialPort? port = _port;
+      _port = null;
+      if (port != null) {
+        try {
+          if (port.isOpen) {
+            port.close();
+          }
+        } finally {
+          port.dispose();
+        }
+      }
+      _incoming.clear();
+    } finally {
+      _closing = false;
+    }
   }
 
   @override

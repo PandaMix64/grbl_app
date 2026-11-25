@@ -47,6 +47,7 @@ app.*.map.json
 # Artefactos locales y secretos (S-01)
 coverage/
 *.tmp
+devtools_options.yaml
 # Firma de Android: nunca versionar credenciales ni keystores
 android/key.properties
 *.jks
