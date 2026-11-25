@@ -30,6 +30,8 @@ abstract final class GrblWorkerCommand {
   static const String streamProgram = 'streamProgram';
   static const String pauseJob = 'pauseJob';
   static const String resumeJob = 'resumeJob';
+  static const String consoleCommand = 'consoleCommand';
+  static const String softReset = 'softReset';
 }
 
 /// Eventos worker → cliente.
@@ -41,6 +43,9 @@ abstract final class GrblWorkerEvent {
 
   /// Progreso del programa: línea de origen confirmada por GRBL.
   static const String progress = 'progress';
+
+  /// Tráfico de consola (comandos enviados y respuestas), sin telemetría.
+  static const String console = 'console';
 
   /// El worker pausó la máquina y **exige** que el cliente guarde el progreso
   /// antes de continuar con el soft reset (SEG-03).
@@ -74,4 +79,5 @@ abstract final class GrblWorkerKey {
   static const String progress = 'progress';
   static const String toolOn = 'toolOn';
   static const String direct = 'direct';
+  static const String text = 'text';
 }

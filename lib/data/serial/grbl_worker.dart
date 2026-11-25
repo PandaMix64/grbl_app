@@ -51,6 +51,7 @@ class GrblWorker {
   StreamSubscription<StatusReport>? _statusSub;
   StreamSubscription<String>? _messageSub;
   StreamSubscription<int>? _progressSub;
+  StreamSubscription<String>? _consoleSub;
   Completer<void>? _persistAck;
 
   /// Servicio interno, expuesto para pruebas en proceso.
@@ -81,6 +82,12 @@ class GrblWorker {
       toClient.send(<String, Object?>{
         GrblWorkerKey.event: GrblWorkerEvent.progress,
         GrblWorkerKey.startLine: line,
+      });
+    });
+    _consoleSub = _service.consoleLines.listen((String line) {
+      toClient.send(<String, Object?>{
+        GrblWorkerKey.event: GrblWorkerEvent.console,
+        GrblWorkerKey.text: line,
       });
     });
   }
@@ -182,6 +189,12 @@ class GrblWorker {
           _reply(id);
         case GrblWorkerCommand.unlock:
           _service.unlock();
+          _reply(id);
+        case GrblWorkerCommand.consoleCommand:
+          _service.sendConsoleCommand(raw[GrblWorkerKey.text] as String? ?? '');
+          _reply(id);
+        case GrblWorkerCommand.softReset:
+          await _service.softReset();
           _reply(id);
         case GrblWorkerCommand.home:
           _service.home();
@@ -350,6 +363,7 @@ class GrblWorker {
     await _statusSub?.cancel();
     await _messageSub?.cancel();
     await _progressSub?.cancel();
+    await _consoleSub?.cancel();
     await _service.dispose();
     _inbox?.close();
   }

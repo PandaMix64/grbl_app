@@ -84,6 +84,8 @@ class GrblWorkerClient {
   final StreamController<WorkerPersistRequest> _persistRequests =
       StreamController<WorkerPersistRequest>.broadcast();
   final StreamController<int> _progress = StreamController<int>.broadcast();
+  final StreamController<String> _console =
+      StreamController<String>.broadcast();
   final Map<int, Completer<Map<String, Object?>>> _pending =
       <int, Completer<Map<String, Object?>>>{};
   final Completer<void> _ready = Completer<void>();
@@ -105,6 +107,9 @@ class GrblWorkerClient {
 
   /// Progreso del programa: línea de origen confirmada por GRBL.
   Stream<int> get programProgress => _progress.stream;
+
+  /// Tráfico de consola (comandos enviados y respuestas), sin telemetría.
+  Stream<String> get consoleLines => _console.stream;
   bool get isReady => _toWorker != null;
 
   /// Lanza el worker en un isolate propio con el puerto FFI real.
@@ -179,6 +184,11 @@ class GrblWorkerClient {
         final Object? progressLine = message[GrblWorkerKey.startLine];
         if (progressLine is int && !_progress.isClosed) {
           _progress.add(progressLine);
+        }
+      case GrblWorkerEvent.console:
+        final Object? consoleLine = message[GrblWorkerKey.text];
+        if (consoleLine is String && !_console.isClosed) {
+          _console.add(consoleLine);
         }
       case GrblWorkerEvent.persistRequest:
         final Object? line = message[GrblWorkerKey.line];
@@ -324,6 +334,15 @@ class GrblWorkerClient {
 
   Future<void> unlock() => _send(GrblWorkerCommand.unlock);
 
+  /// Envía una línea escrita en la consola de la UI.
+  Future<void> sendConsoleCommand(String line) => _send(
+    GrblWorkerCommand.consoleCommand,
+    <String, Object?>{GrblWorkerKey.text: line},
+  );
+
+  /// Soft reset manual (`0x18`); pierde posición y estado modal.
+  Future<void> softReset() => _send(GrblWorkerCommand.softReset);
+
   Future<void> home() => _send(GrblWorkerCommand.home);
 
   /// Ejecuta un jog (`$J=`) con avance obligatorio.
@@ -431,6 +450,7 @@ class GrblWorkerClient {
     await _messages.close();
     await _persistRequests.close();
     await _progress.close();
+    await _console.close();
   }
 }
 

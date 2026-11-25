@@ -77,6 +77,8 @@ class GrblSerialService {
       StreamController<String>.broadcast();
   final StreamController<int> _progressController =
       StreamController<int>.broadcast();
+  final StreamController<String> _consoleController =
+      StreamController<String>.broadcast();
 
   StreamSubscription<String>? _subscription;
   Timer? _pollTimer;
@@ -100,9 +102,14 @@ class GrblSerialService {
 
   /// Progreso del programa en curso: línea de origen ya confirmada por GRBL.
   ///
-  /// Solo se emite mientras hay un programa activo, como máximo cada 10 líneas
-  /// y siempre al vaciarse el búfer.
+  /// Se emite cada 10 `ok` y siempre al vaciarse el búfer.
   Stream<int> get programProgress => _progressController.stream;
+
+  /// Tráfico de consola: comandos enviados (`→`) y respuestas (`←`).
+  ///
+  /// Excluye la telemetría `<...>` y los `ok` del streaming para que sea legible
+  /// con la máquina en movimiento.
+  Stream<String> get consoleLines => _consoleController.stream;
 
   /// Línea de origen desde la que arrancó el programa actual.
   int get programStartLine => _programStartLine;
@@ -248,6 +255,11 @@ class GrblSerialService {
       return;
     }
 
+    // Consola legible: sin telemetría y sin la ráfaga de `ok` del streaming.
+    if (!text.startsWith('<') && !(text == 'ok' && _programActive)) {
+      _consoleAdd('← $text');
+    }
+
     if (text == 'ok') {
       _buffer.acknowledgeOk();
       if (_programActive) {
@@ -332,6 +344,12 @@ class GrblSerialService {
   void _emitMessage(String message) {
     if (!_messagesController.isClosed) {
       _messagesController.add(message);
+    }
+  }
+
+  void _consoleAdd(String line) {
+    if (!_consoleController.isClosed) {
+      _consoleController.add(line);
     }
   }
 
@@ -776,10 +794,61 @@ class GrblSerialService {
   }
 
   /// Desbloquea una alarma (`$X`). No mueve la máquina.
-  void unlock() => enqueue(r'$X');
+  void unlock() {
+    _consoleAdd(r'→ $X');
+    enqueue(r'$X');
+  }
 
   /// Ejecuta el ciclo de homing (`$H`).
-  void home() => enqueue(r'$H');
+  void home() {
+    _consoleAdd(r'→ $H');
+    enqueue(r'$H');
+  }
+
+  /// Envía una línea escrita en la consola de la UI.
+  ///
+  /// Los comandos de sistema (`$`) se aceptan en cualquier estado; el resto
+  /// exige `Idle` para no inyectar movimiento en mitad de un trabajo.
+  void sendConsoleCommand(String command) {
+    _requireConnected();
+    final String trimmed = command.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError('El comando está vacío.');
+    }
+    if (trimmed.contains('\n') || trimmed.contains('\r')) {
+      throw ArgumentError('La consola envía una sola línea por vez.');
+    }
+    final bool isSystem = trimmed.startsWith(r'$');
+    if (!isSystem && state != MachineState.idle) {
+      throw GrblSafetyException(
+        'Solo se envían comandos con la máquina en Idle '
+        '(estado ${state.label}). Usa comandos con "\$" para consultar o '
+        'desbloquear.',
+      );
+    }
+    _consoleAdd('→ $trimmed');
+    enqueue(trimmed);
+  }
+
+  /// Soft reset manual (`0x18`).
+  ///
+  /// Pierde la posición y cancela el trabajo: **no** sustituye a la pausa. Si
+  /// hay un trabajo en curso, la UI debe usar `stopJob` para no perder el punto
+  /// de reanudación.
+  Future<void> softReset({Duration? timeout}) async {
+    _requireConnected();
+    _buffer.reset();
+    _programActive = false;
+    _consoleAdd('→ soft reset (0x18)');
+    final Future<String> banner = banners.first.timeout(
+      timeout ?? const Duration(seconds: 3),
+      onTimeout: () => throw const GrblSafetyException(
+        'GRBL no respondió al soft reset: revisa el puerto y reconecta.',
+      ),
+    );
+    _port.writeRealtime(GrblRealtime.softReset);
+    await banner;
+  }
 
   /// Alterna el spindle stop (solo tiene efecto en `Hold`).
   void toggleSpindleStop() {
@@ -813,5 +882,6 @@ class GrblSerialService {
     await _messagesController.close();
     await _bannerController.close();
     await _progressController.close();
+    await _consoleController.close();
   }
 }
