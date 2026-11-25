@@ -171,6 +171,7 @@ correcta.
 | :--- | :--- | :--- |
 | 13.1 | Pestaña **Trazado** → «Elegir imagen» y «Valores del perfil» | Ancho y avances tomados del perfil |
 | 13.2 | Modo **Rutas vectoriales**, simplificar 0.15 mm | Vista previa del contorno y resumen con número de trayectos |
+| 13.2b | Subir «Suavizar» a 0.8 mm con una imagen de curvas (corazón) | Desaparece el zigzag de las diagonales y la punta sigue afilada |
 | 13.3 | Ejecutar y observar los viajes | El rotulador sube entre trayectos y el orden minimiza los desplazamientos |
 | 13.4 | Cambiar a **Bordado raster** con separación 2 mm y ángulo 45° | Relleno de líneas paralelas; zigzag entre líneas |
 | 13.5 | Añadir puntada de 3 mm | El relleno se ve a trazos (efecto bordado) |

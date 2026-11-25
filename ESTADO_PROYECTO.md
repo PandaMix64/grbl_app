@@ -765,6 +765,33 @@ Recuperación de la sesión: `git log --oneline --grep="S-16"`.
 
 ---
 
+### S-17 — 2026-11-24 · Suavizado de diagonales en el trazado (M4.4)
+
+**Alcance:** corregir el zigzag de las líneas diagonales y curvas del trazado vectorial (por ejemplo, el contorno de un corazón), detectado en las pruebas del usuario.
+
+**Causa:** la silueta es una escalera de píxeles; con una tolerancia pequeña, Douglas–Peucker conserva cada escalón y el rotulador dibuja decenas de micro-movimientos en diente de sierra.
+
+**Entregado**
+
+| # | Cambio | Archivo(s) | Estado |
+| :--- | :--- | :--- | :--- |
+| 1 | `PlotSettings.smoothMm` (0..5 mm; 0.4 por defecto) con validación | `lib/domain/services/plot_generator.dart` | ✅ |
+| 2 | Suavizado por promedio de vecinos **conservando esquinas** + re-simplificación | `plot_generator.dart` | ✅ |
+| 3 | Campo «Suavizar (mm)» en la pestaña de trazado | `lib/features/plot/plot_page.dart` | ✅ |
+| 4 | Prueba de regresión: en un rombo, la suma de giros baja > 30 % | `test/domain/plot_generator_test.dart` | ✅ |
+
+**Verificaciones ejecutadas:** `dart format --set-exit-if-changed` → 0 cambios · `flutter analyze` → *No issues found* · `flutter test` → **249 en verde, 1 saltada** · `flutter build windows --debug` → OK.
+
+**Decisiones de diseño**
+
+- Un vértice se considera **esquina** si se separa del punto medio de sus vecinos más de `1,5 × ventana` píxeles: los escalones de una diagonal se suavizan, la punta de un corazón se conserva.
+- Después de suavizar se vuelve a simplificar (media tolerancia) para no inflar el número de líneas del G-code.
+- 0 mm desactiva el suavizado: útil para trazados geométricos con ángulos duros.
+
+**Decisiones tomadas:** ADR-045.
+
+---
+
 ## 5. Decisiones de arquitectura (ADR resumidas)
 
 | ID | Decisión | Motivo | Consecuencia |
@@ -813,6 +840,7 @@ Recuperación de la sesión: `git log --oneline --grep="S-16"`.
 | ADR-042 | El relieve exige perfil de fresadora | Usa `M3` y `Z`; con láser el equivalente es el grabado en escala de grises | Error explicativo si el perfil no es de fresadora |
 | ADR-043 | El trazado de contornos y la simplificación viven en `ContourTracer` | CAM y plóter necesitaban lo mismo y duplicarlo garantiza divergencias | Un solo algoritmo con una sola batería de pruebas |
 | ADR-044 | Plóter con rotulador configurable (`M3 S…`/`M5` o `G1 Z…`/`G0 Z…`) y dos modos de dibujo | No todos los plóters usan servo ni todos los trabajos son line-art | Vectorial con orden por proximidad y bordado raster con ángulo/puntadas |
+| ADR-045 | Suavizado por promedio de vecinos con conservación de esquinas, antes de simplificar | Las diagonales salían como escalera de píxeles con decenas de micro-movimientos | `smoothMm` (0 = sin suavizar); esquinas con desviación > 1,5 × ventana se mantienen |
 
 ---
 

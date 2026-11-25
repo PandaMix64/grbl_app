@@ -147,6 +147,8 @@ Pestaña dedicada a **dibujar con rotulador**, con dos procesados de imagen:
 
 - **Rutas vectoriales**: silueta vectorizada, simplificada y **ordenada por proximidad** para minimizar los viajes con
   el rotulador levantado. Ideal para line-art y contornos.
+- **Suavizar (mm)**: elimina el diente de sierra de diagonales y curvas promediando vecinos y **conservando las esquinas**
+  marcadas (0 = sin suavizar).
 - **Bordado raster**: líneas paralelas que rellenan las zonas oscuras, con **separación, ángulo y puntadas**
   configurables; el zigzag entre líneas reduce los desplazamientos.
 - **Rotulador** configurable: `M3 S…`/`M5` (servo en el husillo) o `G1 Z…`/`G0 Z…` (eje Z), con avances de dibujo y de
