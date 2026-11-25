@@ -1,11 +1,11 @@
 import 'package:drift/native.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:grbl_app/app/app.dart';
 import 'package:grbl_app/app/providers.dart';
 import 'package:grbl_app/data/database/app_database.dart';
 import 'package:grbl_app/data/serial/grbl_worker_client.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'helpers/fake_serial_port.dart';
 
@@ -103,5 +103,13 @@ void main() {
     expect(find.byKey(const Key('viewer-canvas')), findsOneWidget);
     expect(find.textContaining('arcos'), findsOneWidget);
     expect(find.textContaining('segmentos'), findsOneWidget);
+
+    // La barra de ejecución aparece y queda bloqueada sin conexión.
+    expect(find.text('Ejecución'), findsOneWidget);
+    expect(find.textContaining('Conecta la máquina'), findsOneWidget);
+    final FilledButton runButton = tester.widget<FilledButton>(
+      find.widgetWithText(FilledButton, 'Ejecutar'),
+    );
+    expect(runButton.onPressed, isNull);
   });
 }

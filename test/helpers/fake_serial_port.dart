@@ -20,6 +20,7 @@ class FakeSerialPort implements SerialPortRepository {
   bool _open = false;
   bool _autoAck = true;
   int _unackedBytes = 0;
+  final List<void Function()> _heldAcks = <void Function()>[];
 
   /// Estado que reporta el emulador.
   String state = 'Idle';
@@ -81,6 +82,9 @@ class FakeSerialPort implements SerialPortRepository {
   /// Si es `true`, cada línea recibe su `ok` (como GRBL en `Idle`).
   set autoAck(bool value) => _autoAck = value;
 
+  /// Retardo artificial de cada `ok`, para simular el ritmo real del puerto.
+  Duration ackDelay = Duration.zero;
+
   /// `true` si alguna vez se superó el búfer de recepción.
   bool overflowDetected = false;
 
@@ -125,13 +129,24 @@ class FakeSerialPort implements SerialPortRepository {
       emitLine(response);
     }
     if (_autoAck) {
-      scheduleMicrotask(() {
+      void acknowledge() {
         _unackedBytes -= bytes;
         if (_unackedBytes < 0) {
           _unackedBytes = 0;
         }
         emitLine('ok');
-      });
+      }
+
+      final bool isSystemCommand = line.trimLeft().startsWith(r'$');
+      if (state == 'Hold' && !isSystemCommand) {
+        // En Hold GRBL deja de vaciar el planificador: los `ok` del programa
+        // llegan al enviar cycle start.
+        _heldAcks.add(acknowledge);
+      } else if (ackDelay == Duration.zero) {
+        scheduleMicrotask(acknowledge);
+      } else {
+        Timer(ackDelay, acknowledge);
+      }
     }
   }
 
@@ -184,11 +199,19 @@ class FakeSerialPort implements SerialPortRepository {
         if (state == 'Run' || state == 'Jog') {
           state = 'Hold';
         }
+        emitLine(statusLine());
       case 0x7E: // '~'
         state = 'Run';
+        emitLine(statusLine());
+        final List<void Function()> held = List<void Function()>.of(_heldAcks);
+        _heldAcks.clear();
+        for (final void Function() acknowledge in held) {
+          acknowledge();
+        }
       case 0x18: // soft reset
         state = 'Alarm';
         _unackedBytes = 0;
+        _heldAcks.clear();
         scheduleMicrotask(() => emitLine(r"Grbl 1.1h ['$' for help]"));
       case 0x85: // jog cancel
         if (state == 'Jog') {
@@ -197,6 +220,7 @@ class FakeSerialPort implements SerialPortRepository {
       case 0x9E: // spindle stop toggle (solo en Hold)
         if (state == 'Hold') {
           spindle = spindle > 0 ? 0 : 500;
+          emitLine(statusLine());
         }
       case 0x84: // safety door
         state = 'Door';
