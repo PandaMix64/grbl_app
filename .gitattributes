@@ -1,0 +1,28 @@
+# Normaliza finales de linea: LF en el repositorio para todo el codigo y documentos.
+* text=auto eol=lf
+
+# Scripts de Windows requieren CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binarios (nunca normalizar ni generar diffs de texto).
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.ttf binary
+*.otf binary
+*.woff binary
+*.woff2 binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.exe binary
+*.jar binary
+*.zip binary
+
+# Archivos generados por herramientas: excluidos de diffs y de estadisticas.
+pubspec.lock linguist-generated=true
+*.g.dart linguist-generated=true
