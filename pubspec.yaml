@@ -45,6 +45,15 @@ dependencies:
   material_ui: ^1.11.1
   libserialport: ^0.3.0+1
 
+# Parche local de `flutter_libserialport`: la versión publicada (0.6.0) no
+# compila con Gradle 9 / AGP 9 (usa `jcenter()` y un buildscript con AGP 8.7),
+# que Flutter 3.50 exige. `third_party/flutter_libserialport` cambia solo el
+# build de Android; el código Dart y las compilaciones nativas de escritorio
+# (CMake) son idénticos a los publicados.
+dependency_overrides:
+  flutter_libserialport:
+    path: third_party/flutter_libserialport
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

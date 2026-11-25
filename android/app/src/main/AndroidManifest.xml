@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- CNC/plóter por USB: se declara el host USB como opcional para poder
+         instalar también en equipos sin puerto OTG. -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
     <application
-        android:label="grbl_app"
+        android:label="GRBL CNC"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

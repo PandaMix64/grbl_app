@@ -43,11 +43,14 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+/android/build/
 
 # Artefactos locales y secretos (S-01)
 coverage/
 *.tmp
 devtools_options.yaml
+# CMake/Gradle generados al compilar plugins vendorizados (S-18)
+**/.cxx/
 # Firma de Android: nunca versionar credenciales ni keystores
 android/key.properties
 *.jks
