@@ -603,6 +603,48 @@ Recuperación de la sesión: `git log --oneline --grep="S-12"`.
 
 ---
 
+### S-13 — 2026-11-24 · Vista previa del grabado y visor a pantalla completa (M3.6)
+
+**Alcance:** que el CAM muestre **el resultado** (no solo la trayectoria) y recuperar viewport en el visor.
+
+**Hallazgos**
+
+| # | Observación | Resolución |
+| :--- | :--- | :--- |
+| 1 | En el visor solo se veía la trayectoria: no se entendía qué iba a quedar grabado | Vista previa en la propia pantalla CAM: una celda = un píxel, con el material quemado en negro |
+| 2 | La barra de ejecución robaba altura al lienzo | Barra compacta superpuesta al viewport, con iconos y una sola línea de estado |
+
+**Entregado**
+
+| # | Cambio | Archivo(s) | Estado |
+| :--- | :--- | :--- | :--- |
+| 1 | `EngravingResult.previewPng`: PNG del mapa de potencia (celdas reales) | `lib/domain/services/engraving_generator.dart` | ✅ |
+| 2 | Vista previa en CAM sobre fondo claro, sin interpolación y con pie de tamaño | `lib/features/cam/cam_page.dart` | ✅ |
+| 3 | `ExecutionBar` compacta: iconos, progreso fino y estado en una línea | `lib/features/viewer/widgets/execution_bar.dart` | ✅ |
+| 4 | Lienzo a pantalla completa con la barra superpuesta; «Centrar trazado» pasa a la barra | `lib/features/viewer/viewer_page.dart` | ✅ |
+| 5 | pruebas: vista previa en el generador y barra nueva en el widget test (216 en verde, 1 saltada) | `test/domain/engraving_generator_test.dart`, `test/widget_test.dart` | ✅ |
+
+**Verificaciones ejecutadas:** `dart format --set-exit-if-changed` → 0 cambios · `flutter analyze` → *No issues found* · `flutter test` → **216 en verde, 1 saltada** · `flutter build windows --debug` → OK.
+
+**Decisiones de diseño**
+
+- La vista previa es el **mapa de potencia** que se enviará, no la foto original: así se ven el umbral, el tramado y la escala real de celdas.
+- Se dibuja con `FilterQuality.none` sobre fondo claro para simular el material y no maquillar los píxeles.
+- La barra superpuesta ocupa una fila (~56 px) en lugar de una tarjeta completa; los avisos (sin conexión, alarma, error) se resumen en una línea bajo el progreso.
+
+**Decisiones tomadas:** ADR-037, ADR-038.
+
+**Trazabilidad (commits de S-13):**
+
+| Hash | Commit |
+| :--- | :--- |
+| `98f5f82` | `feat(cam): muestra la vista previa del grabado en la propia pantalla` |
+| `df3c22f` | `feat(visor): barra de ejecucion compacta sobre el lienzo` |
+
+Recuperación de la sesión: `git log --oneline --grep="S-13"`.
+
+---
+
 ## 5. Decisiones de arquitectura (ADR resumidas)
 
 | ID | Decisión | Motivo | Consecuencia |
@@ -643,6 +685,8 @@ Recuperación de la sesión: `git log --oneline --grep="S-12"`.
 | ADR-034 | Perder el enlace con trabajo activo marca `interrupted` y conserva el punto de reanudación | El estado de la máquina es incierto pero el progreso guardado sigue siendo válido | Se cancelan suscripciones y el proyecto pasa a `interrupted` en SQLite |
 | ADR-035 | El CAM de imágenes se limita a láser (`M4`) y ejecuta la conversión en un isolate con tope de 250 000 celdas | Con husillo el `S` es velocidad, no potencia; y una rejilla enorme generaría millones de líneas | Modos umbral, tramado y escala de grises; rechazo explícito si el perfil no es láser |
 | ADR-036 | El CAM nunca envía a la máquina: carga el G-code en el visor | Una previsualización obligatoria evita ejecutar un grabado mal escalado o invertido | Se reutilizan visor, compensación de holgura y barreras de ejecución |
+| ADR-037 | La vista previa del CAM es el mapa de potencia (1 celda = 1 píxel), no la imagen original | La trayectoria no permite juzgar el resultado; el mapa de celdas sí | PNG generado en el isolate junto al G-code; fondo claro y sin interpolación |
+| ADR-038 | Barra de ejecución compacta superpuesta al lienzo | La tarjeta completa robaba altura al viewport, que es lo que se mira | Iconos + progreso fino + una línea de aviso; «Centrar trazado» se integra en ella |
 
 ---
 

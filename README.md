@@ -121,6 +121,8 @@ El módulo de Calibración permite:
 
 - Arrastrar desplaza, pellizcar/rueda acerca, girar rota y doble toque restablece la vista.
 - El botón **Centrar trazado** reencuadra el programa (y al cargar un archivo nuevo el encuadre es automático).
+- La **barra de ejecución** va superpuesta al lienzo (iconos, progreso fino y estado en una línea): el viewport ocupa todo
+  el espacio disponible.
 - El cabezal usa la **última posición conocida**: GRBL omite `WCO` en la mayoría de reportes, así que la app memoriza el offset y conserva el WPos en lugar de borrarlo. Si un reporte no trae posición, la barra y el panel de origen lo indican como «(última lectura)».
 - Los códigos que cambian el sistema de coordenadas (`G28`, `G30`, `G53`, `G92`) **no se simulan**: se muestran como avisos.
 
@@ -150,6 +152,8 @@ permite pausar, reanudar y detener:
   debe caber en su recorrido.
 - **Previsualización obligatoria**: el resultado se carga en el visor (con la holgura aplicada al ejecutar) y nunca se
   envía a la máquina desde el CAM.
+- **Vista previa en la propia pantalla**: mapa de potencia del grabado (una celda = un píxel) sobre fondo claro, para ver
+  el resultado antes de generar el envío.
 
 
 ## Barra superior

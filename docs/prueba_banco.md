@@ -147,7 +147,7 @@ herramienta montada.
 | Paso | Acción | Esperado |
 | :--- | :--- | :--- |
 | 12.1 | Crear/seleccionar un perfil con herramienta **láser** | «Valores del perfil» rellena potencia, avance y ancho |
-| 12.2 | Cargar una imagen pequeña (≤ 50 mm) en modo Umbral | Resumen: tamaño, celdas, líneas y % grabado |
+| 12.2 | Cargar una imagen pequeña (≤ 50 mm) en modo Umbral | Resumen: tamaño, celdas, líneas y % grabado, y **vista previa del resultado** sobre fondo claro |
 | 12.3 | «Enviar al visor» | El visor dibuja el trazo y el archivo se llama `<imagen>_grabado.gcode` |
 | 12.4 | Ejecutar con potencia baja | El haz solo se enciende en las celdas oscuras y se apaga en los rápidos |
 | 12.5 | Probar Tramado y Escala de grises | Patrón de puntos y potencia variable respectivamente |
