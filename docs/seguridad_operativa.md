@@ -165,7 +165,7 @@ Reglas:
 | SEG-02 | El worker nunca envía `M5`/`S0` mientras el estado reportado sea `Run` | `GrblSerialService` solo usa `0x9E` (solo efectivo en `Hold`); no existe camino de código que envíe `M5` |
 | SEG-03 | Ningún camino de código alcanza `0x18` sin persistencia previa del progreso | `stopJob` exige `persistProgress`; test *no se resetea sin persistir el progreso (SEG-03)* |
 | SEG-04 | `0x85` se envía solo si el estado reportado es `Jog`; en otro caso se registra y se ignora | tests *cancelar jog se ignora fuera del estado Jog* y *cancelar jog en Jog envía 0x85* |
-| SEG-05 | La reanudación falla de forma segura si `$G`/`$#` difieren de lo guardado | Pendiente: se implementa con la persistencia de Fase 3 (`ResumeState.parserState`) |
+| SEG-05 | La reanudación falla de forma segura si `$G`/`$#` difieren de lo guardado | Parcial: `ParserState.isCompatibleWith` y `WorkOffsets.matches` existen y están probados; falta conectarlos al flujo de reanudación (Fase 3) |
 | SEG-06 | El botón "Detener" exige confirmación y enumera las tres consecuencias del §5 | Pendiente: UI de la Fase 1 |
 
 ### 9.1 Criterios de flujo de datos
@@ -175,5 +175,8 @@ Reglas:
 | FLOW-01 | El presupuesto de 128 B nunca se desborda | `test/serial/character_counting_buffer_test.dart` (10 000 líneas) y `FakeSerialPort.overflowDetected` |
 | FLOW-02 | Un `error:` libera espacio igual que un `ok` | tests de `CharacterCountingBuffer` y del servicio |
 | FLOW-03 | Los comandos en tiempo real no consumen presupuesto | `GrblSerialService` los escribe con `writeRealtime`, fuera del `CharacterCountingBuffer` |
+| FLOW-04 | El presupuesto usa el búfer **real** del firmware, no 128 B asumidos | `BuildInfo` desde `$I` + `CharacterCountingBuffer.resize`; tests *detecta un búfer de 256 B* y *no asume 128 B* |
+| FLOW-05 | El banner inicial no se pierde | La suscripción al puerto se crea antes de abrirlo (test de handshake: `bannerReceived`) |
+| FLOW-06 | Un `stop` no resetea sin confirmación de persistencia a través del isolate | `GrblWorker` emite `persistRequest` y espera `persistDone`; test *stop exige confirmar la persistencia* |
 
 

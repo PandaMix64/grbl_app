@@ -163,7 +163,7 @@ El contenedor portable necesita `schemaVersion`, migración explícita y validac
 | Gestión de estado | Riverpod (o BLOC) | `flutter_riverpod ^3.5.0` + `riverpod_generator` | 3.5.0 vigente; API `Notifier`/`AsyncNotifier`; decidir Riverpod **o** BLOC, no ambos |
 | Persistencia | Drift (SQLite) | `drift ^2.35.4` + `drift_flutter` + `drift_dev` + `build_runner` | Ejecución de consultas en isolate de forma nativa. **No** añadir `sqlite3_flutter_libs`: está obsoleto (`0.6.0+eol`, "no longer does anything") desde `sqlite3` 3.x, que `drift_flutter` ya resuelve |
 | Motor 3D | `CustomPainter` + `vector_math` | `vector_math ^2.4.4` (import `vector_math_64`) | Precisión 64 bits, coherente con Flutter |
-| Puerto serial | `flutter_libserialport` | `flutter_libserialport: ^0.6.0` fijado + fachada propia | 0.6.0 cubre Android/Linux/macOS/Windows; no iOS ni web |
+| Puerto serial | `flutter_libserialport` | `flutter_libserialport: ^0.6.0` fijado + fachada propia; `libserialport: ^0.3.0` como dependencia directa | 0.6.0 cubre Android/Linux/macOS/Windows; no iOS ni web. `libserialport` se declara explícitamente porque la implementación FFI lo importa (`depend_on_referenced_packages`) |
 | Imágenes del CAM | (no especificado) | `image` (Dart puro, seguro en isolates) + `file_selector` o `file_picker` | `image` no depende de plugins, apto para `Isolate.run` |
 | Internacionalización | (no especificado) | `material_ui` exporta `GlobalMaterialLocalizations`; no añadir `flutter_localizations` por separado | Desde Flutter 3.47 los widgets Material viven en `package:material_ui/material_ui.dart` y `package:flutter/material.dart` está deprecado |
 

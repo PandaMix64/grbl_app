@@ -9,11 +9,11 @@
 | :--- | :--- |
 | Proyecto | `grbl_app` — entorno CNC con Flutter + GRBL v1.1h |
 | Repositorio | Git local, rama `main` (inicializado 2026-11-24) |
-| Sesión actual | **S-02 (cerrada)** |
-| Fase actual | **Fase 0 — Fundaciones (cierre) · Fase 1 iniciada** |
-| Avance global estimado | ~35 % |
-| Bloqueos | Ninguno. El CI está escrito pero aún no se ha ejecutado en GitHub |
-| Siguiente hito | **M1.1** — `LibSerialPortRepository` (FFI) + isolate worker real con el `GrblSerialService` dentro |
+| Sesión actual | **S-03 (cerrada)** |
+| Fase actual | **Fase 1 — Núcleo y Serial (camino de conexión completo)** |
+| Avance global estimado | ~50 % |
+| Bloqueos | Ninguno. Falta la verificación con hardware real (R-10) |
+| Siguiente hito | **M1.2** — persistencia Drift + cableado del worker en Riverpod y barra de conexión |
 
 ---
 
@@ -31,7 +31,7 @@
 | Fase | Objetivo | Estado | Notas |
 | :--- | :--- | :--- | :--- |
 | **Fase 0: Fundaciones** | Repo, entorno, contratos de dominio, fachada serial, política de seguridad | 🟢 **Cerrada salvo licencia y CHANGELOG** | Añadida por la revisión técnica; M0.1–M0.3 entregados en S-02 |
-| **Fase 1: Núcleo y Serial** | Clean Architecture, esquema SQLite, navegación M3, isolate serial con *character-counting* | 🟡 **En curso** | Navegación M3, dominio y control de flujo listos; falta la implementación FFI y el isolate |
+| **Fase 1: Núcleo y Serial** | Clean Architecture, esquema SQLite, navegación M3, isolate serial con *character-counting* | 🟡 **En curso (~60 %)** | Conexión, handshake, worker y búfer real listos; faltan Drift y la UI de conexión |
 | **Fase 2: Calibración** | Jogging, pasos/mm, parámetros `$`, perfiles y *backlash* | ⬜ Pendiente | *Backlash* según P0-2 (sin `G92`) |
 | **Fase 3: Visor 3D** | Renderizado, interpretación de G-code, pausa/detención y reanudación segura | ⬜ Pendiente | `ResumeState` y `MotionSegment` ya existen; falta persistencia y render |
 | **Fase 4: Generador CAM** | Imagen → G-code (vectorización, dithering, relieve 2.5D) | ⬜ Pendiente | Modo láser requiere `$32` (P1-1) |
@@ -64,15 +64,25 @@ Leyenda: 🟡 en curso · ✅ cerrada · ⬜ pendiente · 🔴 bloqueada
 - [x] `SerialPortRepository` (interfaz) y `FakeSerialPort` para pruebas
 - [x] `CharacterCountingBuffer` (presupuesto de 128 B, `error:` libera, tiempo real excluido)
 - [x] `GrblSerialService` con streaming, telemetría y secuencias de seguridad (SEG-01/03/04)
-- [ ] `LibSerialPortRepository` (FFI sobre `flutter_libserialport`)
-- [ ] Isolate worker que posea el puerto y exponga el servicio por mensajes
+- [x] `LibSerialPortRepository` (FFI sobre `flutter_libserialport`)
+- [x] Isolate worker tipado (`GrblWorker` + `GrblWorkerClient`) con el servicio dentro
 - [ ] Extraer `SafetyController` como fachada explícita (hoy las secuencias viven en el servicio)
 
-### M1.1 Persistencia y conexión real
-- [ ] Esquema Drift (`machine_profiles`, `projects`, `recent_files`) y migraciones
-- [ ] Lectura de `$$`, `$G`, `$#` al conectar y comparación con el perfil
-- [ ] Sondeo de estado a 5 Hz con `?` desde el isolate
-- [ ] Detección del búfer real al conectar (no asumir 128 B)
+### M1.1 Conexión real (cerrada en S-03)
+- [x] `LibSerialPortRepository`: 8-N-1, sin flow control, `\r`, reensamblado de líneas
+- [x] Worker en isolate propio + protocolo de mensajes tipado
+- [x] Sondeo de estado a 5 Hz (`?`) desde el worker (200 ms configurable)
+- [x] Handshake al conectar: `$I`, `$$`, `$G`, `$#` y banner
+- [x] Detección del búfer real vía `[OPT:...,<bloques>,<bytes>]` y ajuste del presupuesto
+- [x] `ProfileConsistency`: comparación perfil ↔ EEPROM con bloqueos y avisos
+- [x] `stopJob` con confirmación de persistencia a través del canal (SEG-03)
+- [ ] Verificación con hardware real (ver R-10)
+
+### M1.2 Persistencia y UI de conexión
+- [ ] Esquema Drift (`machine_profiles`, `projects`, `recent_files`) con migraciones
+- [ ] Providers de Riverpod para el `GrblWorkerClient` y la telemetría
+- [ ] Barra de conexión: puerto, baudios, estado y avisos de `ProfileConsistency`
+- [ ] Persistencia del punto de reanudación al confirmar `WorkerPersistRequest`
 
 ---
 
@@ -156,6 +166,36 @@ Recuperación de la sesión: `git log --oneline --grep="S-02"`.
 
 ---
 
+### S-03 — 2026-11-24 · Conexión real: FFI, isolate y handshake (M1.1)
+
+**Alcance:** cerrar el camino de conexión con hardware (M1.1): implementación FFI del puerto, worker en isolate, handshake con `$I`/`$$`/`$G`/`$#`, detección del búfer real y comparación perfil ↔ EEPROM.
+
+**Entregado**
+
+| # | Cambio | Archivo(s) | Estado |
+| :--- | :--- | :--- | :--- |
+| 1 | `BuildInfo` desde `$I`: versión, fecha, flags, bloques del planner y **búfer RX real** | `lib/domain/entities/build_info.dart` | ✅ |
+| 2 | `ParserState` desde `$G` con comparación modal para reanudar (SEG-05) | `lib/domain/entities/parser_state.dart` | ✅ |
+| 3 | `WorkOffsets` desde `$#` con comparación por tolerancia | `lib/domain/entities/work_offsets.dart` | ✅ |
+| 4 | `GrblHandshake` (instantánea de sesión) con serialización JSON | `lib/domain/entities/grbl_handshake.dart` | ✅ |
+| 5 | Consultas de sistema acumulando líneas hasta el `ok`, con timeout y bloqueo en movimiento | `lib/data/serial/grbl_serial_service.dart` | ✅ |
+| 6 | `connectAndIdentify`: banner → `$I` → ajuste de búfer → `$$`/`$G`/`$#` | idem | ✅ |
+| 7 | **Bug corregido:** la suscripción al puerto se crea antes de abrirlo (el banner se perdía) | idem | ✅ |
+| 8 | `LibSerialPortRepository`: FFI 8-N-1 sin flow control, `\r`, reensamblado de líneas | `lib/data/serial/lib_serial_port_repository.dart` | ✅ |
+| 9 | Worker en isolate + protocolo de mapas + cliente tipado; `stop` con ack de persistencia | `lib/data/serial/grbl_worker*.dart` | ✅ |
+| 10 | `ProfileConsistency`: perfil ↔ EEPROM con bloqueos y avisos justificados | `lib/domain/services/profile_consistency.dart` | ✅ |
+| 11 | 28 pruebas nuevas (82 en total, 1 saltada por entorno) | `test/domain/`, `test/serial/` | ✅ |
+
+**Verificaciones ejecutadas:** `flutter analyze` → *No issues found* · `flutter test` → **82 en verde, 1 saltada** · `dart format` → 0 cambios.
+
+**Hallazgo de entorno:** la biblioteca `serialport.dll` **solo** la despliega CMake en el bundle de la aplicación; no está disponible para `flutter test`. La prueba de humo FFI se salta con motivo explícito y la verificación real queda en R-10.
+
+**Decisiones tomadas:** ADR-011, ADR-012, ADR-013, ADR-014.
+
+**Abierto al cierre:** esquema Drift, providers de Riverpod, UI de conexión, extracción del `SafetyController` y verificación con hardware real.
+
+---
+
 ## 5. Decisiones de arquitectura (ADR resumidas)
 
 | ID | Decisión | Motivo | Consecuencia |
@@ -170,6 +210,10 @@ Recuperación de la sesión: `git log --oneline --grep="S-02"`.
 | ADR-008 | No usar `sqlite3_flutter_libs` | Está obsoleto (`0.6.0+eol`, "no longer does anything"); `sqlite3` 3.x lo reemplaza y `drift_flutter` ya lo resuelve | La persistencia se configura solo con `drift` + `drift_flutter` |
 | ADR-009 | Las secuencias de seguridad viven en `GrblSerialService` hasta que exista `SafetyController` | Evita duplicar lógica y garantiza que ningún widget toque bytes; los criterios SEG están cubiertos por tests | Clase en crecimiento: extraer fachada al construir la UI de Fase 1 |
 | ADR-010 | Pruebas contra `FakeSerialPort`, un emulador GRBL que detecta desbordes | Sin emulador, el flujo de 128 B no se puede probar de forma repetible | Todo cambio de protocolo debe añadir su caso al fake |
+| ADR-011 | Worker en isolate propio con protocolo de mapas y `SendPort` | Aísla la FFI y el bucle de lectura del hilo de UI | Toda la API pasa por `GrblWorkerClient`; nada de bytes desde widgets |
+| ADR-012 | El comando `stop` exige confirmación de persistencia desde el cliente | SEG-03 no se puede garantizar si el worker resetea por su cuenta | El worker emite `persistRequest` y espera `persistDone` (20 s); sin ack no hay `0x18` |
+| ADR-013 | El tamaño de búfer se detecta con `$I` y se aplica antes de leer la EEPROM | P1-4: no asumir 128 B; `[OPT:...,bloques,bytes]` es la fuente oficial | Si `$I` no responde se conserva 128 B y se avisa por el canal de mensajes |
+| ADR-014 | Las pruebas que requieren la biblioteca nativa se saltan fuera de un build de la app | CMake despliega `serialport.dll` solo en el bundle | La verificación FFI se hace con `flutter run -d windows` + hardware (R-10) |
 
 ---
 
@@ -194,21 +238,25 @@ Recuperación de la sesión: `git log --oneline --grep="S-02"`.
 | R-04 | Sin emulador GRBL no se puede probar streaming ni alarmas | Errores detectados sólo en hardware | Puerto falso + emulador antes de la Fase 2 | 🟡 Mitigado en diseño |
 | R-05 | Renderizado lento con G-code extenso | UI inutilizable en trabajos reales | Batching con `drawRawPoints` + criterio de 60 fps con 200 k segmentos | 🟡 Mitigado en diseño |
 | R-06 | Sobrescritura de EEPROM en cada conexión | Desgaste del ATmega | Escribir sólo si el valor difiere de `$$` (`GrblSettings.diff`) | 🟡 Mitigado en diseño |
-| R-07 | `LibSerialPortRepository` sin implementar: la app aún no habla con hardware | Fase 1 detenida hasta implementarlo | FFI + isolate; validar con un Arduino en banco antes de la UI | 🔴 Abierto |
+| R-07 | `LibSerialPortRepository` sin implementar: la app aún no habla con hardware | Fase 1 detenida hasta implementarlo | Implementado en S-03 (FFI + worker con handshake); queda la prueba en banco (R-10) | 🟢 Cerrado |
 | R-08 | CI escrito pero nunca ejecutado en GitHub | Errores de entorno no detectados | Primer push y revisión del run | 🟡 Abierto |
 | R-09 | `GrblSerialService` mezcla transporte y política de seguridad | Mantenibilidad | Extraer `SafetyController` antes de la UI de calibración | 🟡 Vigilado |
+| R-10 | El camino FFI (DLL + handshake) no se ha ejecutado contra hardware ni en un build de escritorio | Fallos de plataforma no detectados hasta la primera prueba real | `flutter run -d windows` con Arduino en banco antes de empezar la UI | 🔴 Abierto |
+| R-11 | Sin reconexión automática tras una pérdida de USB | Trabajo interrumpido y estado perdido | Detectar error de puerto, marcar `Disconnected` y exigir reconexión con handshake | 🟡 Vigilado |
+| R-12 | La persistencia (Drift) aún no existe: `persistProgress` solo puede confirmar de memoria | El ack de SEG-03 no garantiza durabilidad todavía | Implementar el esquema Drift en M1.2 antes de usar `stop` en producción | 🔴 Abierto |
 
 ---
 
 ## 8. Próximos pasos (orden estricto)
 
-1. `LibSerialPortRepository` sobre `flutter_libserialport`: listar puertos, abrir a 115200, `writeLine` con `\r`, exponer `lines`. Verificar en Windows que `libserialport.dll` llega al build.
-2. Mover el puerto y el `GrblSerialService` a un isolate worker (`ReceivePort`/`SendPort`) y exponer un canal tipado a la UI.
-3. Extraer `SafetyController` como fachada única de acciones críticas y conectar los botones de la pantalla de conexión.
-4. Esquema Drift (`machine_profiles`, `projects`, `recent_files`) con migraciones y test de apertura/cierre.
-5. Lectura de `$$`, `$G` y `$#` al conectar; comparar con el perfil activo y avisar de discrepancias.
-6. Prueba de humo con hardware real: pausa con herramienta apagada, jog cancel y detención con `$X` posterior.
-7. `CHANGELOG.md`, licencia del proyecto y `NOTICE` con la atribución GPLv3 de GRBL.
-8. Primer push al remoto para que el CI corra de verdad.
+1. **M1.2 — Drift**: tablas `machine_profiles`, `projects`, `recent_files`, migraciones y pruebas con `NativeDatabase.memory()`.
+2. Providers de Riverpod: `grblWorkerProvider` (spawn/dispose), telemetría con `select()` por magnitud y canal de mensajes.
+3. Barra de conexión en la pantalla de Inicio: `listPorts`, baudios, handshake y avisos de `ProfileConsistency` (bloqueos en rojo).
+4. Persistencia real del punto de reanudación al recibir `WorkerPersistRequest` (cierra R-12).
+5. Verificación en banco (R-10): `flutter run -d windows` + Arduino con GRBL; comprobar enumeración, handshake, búfer detectado, pausa con herramienta apagada y `$X` tras detener.
+6. Extraer `SafetyController` sobre `GrblWorkerClient` para que la UI no llame métodos peligrosos directamente.
+7. `CHANGELOG.md`, licencia y `NOTICE` con la atribución GPLv3 de GRBL.
+8. Push al remoto para que el CI corra de verdad (R-08).
+
 
 

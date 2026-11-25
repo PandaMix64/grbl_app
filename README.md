@@ -62,14 +62,39 @@ lib/
   app/          # GrblApp y HomeShell (NavigationRail / NavigationBar adaptativo)
   core/grbl/    # constantes de protocolo (bytes en tiempo real, búfer, baudios)
   core/widgets/ # widgets compartidos
-  domain/       # entidades puras y contrato SerialPortRepository
-  data/serial/  # control de flujo por conteo de caracteres y servicio GRBL
+  domain/
+    entities/   # StatusReport, BuildInfo, ParserState, WorkOffsets, perfiles, proyectos
+    repositories/  # contrato SerialPortRepository
+    services/   # ProfileConsistency (perfil ↔ EEPROM)
+  data/serial/  # conteo de caracteres, servicio GRBL, FFI y worker isolate
   features/     # home, calibration, viewer, cam
 test/
-  domain/       # parseo de telemetría, settings, perfiles, proyectos
-  serial/       # presupuesto de 128 B y secuencias de seguridad
+  domain/       # parseo de telemetría y protocolo, perfiles, proyectos, consistencia
+  serial/       # presupuesto de 128 B, seguridad, handshake y worker
   helpers/      # FakeSerialPort: emulador GRBL de pruebas
 ```
+
+## Conexión serial
+
+El puerto vive en un isolate propio y la UI solo habla con `GrblWorkerClient`:
+
+```dart
+final GrblWorkerClient client = await GrblWorkerClient.spawn();
+final List<SerialPortInfo> ports = await client.listPorts();
+final GrblHandshake session = await client.connect(portName: ports.first.name);
+
+print('GRBL ${session.firmwareVersion} · búfer ${session.rxBufferSize} B');
+client.statusReports.listen((StatusReport report) => print(report.state.label));
+await client.startPolling(); // 5 Hz
+
+// Pausa segura: `!` + `0x9E`, con verificación de herramienta apagada.
+await client.pause();
+```
+
+`connect()` ejecuta el handshake completo: banner, `$I` (de donde sale el **tamaño real** del búfer RX), `$$`, `$G` y `$#`. `stopJob()` emite un `WorkerPersistRequest`: hasta que no se llame `confirmPersisted()` no se envía el soft reset (SEG-03).
+
+> **Nota de entorno:** `flutter_libserialport` despliega la biblioteca nativa mediante CMake en el *bundle* de la aplicación. Por eso `flutter test` no puede cargarla: la prueba de humo FFI se salta y la verificación real se hace con `flutter run -d windows` (ver R-10 en `ESTADO_PROYECTO.md`).
+
 
 ## Convenciones
 
