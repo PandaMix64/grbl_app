@@ -332,6 +332,17 @@ Recuperación de la sesión: `git log --oneline --grep="S-05"`.
 
 **Decisiones tomadas:** ADR-019, ADR-020, ADR-021.
 
+**Trazabilidad (commits de S-06):**
+
+| Hash | Commit |
+| :--- | :--- |
+| `e277793` | `feat(domain): compensador de holgura con movimiento real` |
+| `4e88055` | `feat(serial): origen de trabajo con G10 L20` |
+| `50117ed` | `feat(calibration): holgura, aplicar perfil, homing y origen en la UI` |
+| `20910e6` | `docs: cierra M2.2 con holgura y origen documentados` |
+
+Recuperación de la sesión: `git log --oneline --grep="S-06"`.
+
 **Abierto al cierre:** el compensador aún no está conectado al flujo de ejecución (no existe ejecución hasta la Fase 3); arcos y Z quedan fuera por diseño (R-16).
 
 ---
