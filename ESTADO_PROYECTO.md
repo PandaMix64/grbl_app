@@ -287,6 +287,17 @@ Recuperación de la sesión: `git log --oneline --grep="S-04"`.
 
 **Decisiones tomadas:** ADR-017, ADR-018.
 
+**Trazabilidad (commits de S-05):**
+
+| Hash | Commit |
+| :--- | :--- |
+| `359d972` | `feat(domain): jog con F obligatorio, pasos/mm y MachineAxis` |
+| `4c33f9b` | `feat(serial): jog y escritura de parametros por diferencias` |
+| `d0e1655` | `feat(calibration): controlador y UI de jogging, parametros y perfiles` |
+| `0cef4cf` | `docs: tablero de S-05 y criterios SEG de calibracion` |
+
+Recuperación de la sesión: `git log --oneline --grep="S-05"`.
+
 **Abierto al cierre:** compensación de holgura con movimiento real, aplicación automática del perfil y homing (M2.2); prueba en banco (R-10).
 
 ---
