@@ -161,13 +161,18 @@ El contenedor portable necesita `schemaVersion`, migración explícita y validac
 | Componente | Documento | Recomendación | Motivo |
 | :--- | :--- | :--- | :--- |
 | Gestión de estado | Riverpod (o BLOC) | `flutter_riverpod ^3.5.0` + `riverpod_generator` | 3.5.0 vigente; API `Notifier`/`AsyncNotifier`; decidir Riverpod **o** BLOC, no ambos |
-| Persistencia | Drift (SQLite) | `drift ^2.35.4` + `drift_flutter` + `drift_dev` + `build_runner` | Ejecución de consultas en isolate de forma nativa |
+| Persistencia | Drift (SQLite) | `drift ^2.35.4` + `drift_flutter` + `drift_dev` + `build_runner` | Ejecución de consultas en isolate de forma nativa. **No** añadir `sqlite3_flutter_libs`: está obsoleto (`0.6.0+eol`, "no longer does anything") desde `sqlite3` 3.x, que `drift_flutter` ya resuelve |
 | Motor 3D | `CustomPainter` + `vector_math` | `vector_math ^2.4.4` (import `vector_math_64`) | Precisión 64 bits, coherente con Flutter |
 | Puerto serial | `flutter_libserialport` | `flutter_libserialport: ^0.6.0` fijado + fachada propia | 0.6.0 cubre Android/Linux/macOS/Windows; no iOS ni web |
 | Imágenes del CAM | (no especificado) | `image` (Dart puro, seguro en isolates) + `file_selector` o `file_picker` | `image` no depende de plugins, apto para `Isolate.run` |
-| Internacionalización | (no especificado) | `flutter_localizations` + ARB | Mensajes de seguridad traducibles |
+| Internacionalización | (no especificado) | `material_ui` exporta `GlobalMaterialLocalizations`; no añadir `flutter_localizations` por separado | Desde Flutter 3.47 los widgets Material viven en `package:material_ui/material_ui.dart` y `package:flutter/material.dart` está deprecado |
 
-**Nota de entorno.** El SDK instalado es **Flutter 3.29.2 / Dart 3.7.2** (marzo 2025). Las versiones actuales de Riverpod y Drift se publicaron después y pueden exigir un SDK superior; `pub` resolverá versiones anteriores automáticamente, pero es preferible **actualizar Flutter como primera tarea de la Fase 0** para no arrastrar dependencias antiguas en un proyecto de 5 fases.
+**Nota de entorno (actualizada en la sesión S-02).** El SDK se actualizó de 3.29.2 a **Flutter 3.50.1 / Dart 3.14.0**, lo que cerró el riesgo R-03 de versiones incompatibles y aplicó ADR-006. Consecuencias verificadas en la práctica:
+
+- `package:flutter/material.dart` **está deprecado**; el import correcto es `package:material_ui/material_ui.dart` (`material_ui ^1.11.1`). Los widgets y el tema siguen siendo Material 3, e incluso `GlobalMaterialLocalizations` se importa desde ese paquete (importarlo además desde `flutter_localizations` provoca `ambiguous_import`).
+- `flutter pub get` migra `analysis_options.yaml` por sí solo para excluir `build/` y los directorios de plataforma.
+- `sqlite3_flutter_libs` quedó obsoleto: en Flutter 3.50 la base SQLite viene de `sqlite3` 3.x, ya resuelta por `drift_flutter`.
+- Los proyectos nuevos deben declarar `environment: sdk: ^3.14.0` para no prometer compatibilidad que el toolchain no ofrece.
 
 La versión de `flutter_libserialport` (0.6.0) fue publicada hace más de un año: conviene verificar al momento de implementar que `libserialport.dll` se empaqueta correctamente en el build de Windows y que el permiso USB de Android (`android.hardware.usb.host` + intent de dispositivo) está declarado en el manifest.
 
