@@ -19,12 +19,16 @@ class WorkerPersistRequest {
     required this.id,
     required this.confirmPersisted,
     this.status,
+    this.parserState,
   });
 
   final Object? id;
 
   /// Último status report antes de la pausa, útil para guardar el punto.
   final StatusReport? status;
+
+  /// Estado modal leído con `$G` dentro de la pausa; `null` si no se pudo leer.
+  final ParserState? parserState;
 
   /// Confirma que el progreso quedó persistido.
   final void Function() confirmPersisted;
@@ -44,6 +48,7 @@ class GrblWorkerClient {
   factory GrblWorkerClient.inProcess({
     required SerialPortRepository port,
     int bufferSize = kDefaultRxBufferSize,
+    Duration persistTimeout = const Duration(seconds: 20),
   }) {
     final ReceivePort fromWorker = ReceivePort();
     final GrblWorkerClient client = GrblWorkerClient._(fromWorker);
@@ -52,6 +57,7 @@ class GrblWorkerClient {
       toClient: fromWorker.sendPort,
       port: port,
       bufferSize: bufferSize,
+      persistTimeout: persistTimeout,
     );
     worker.listen(inbox);
     // En el mismo isolate el canal está listo de inmediato: no hay que esperar
@@ -169,11 +175,21 @@ class GrblWorkerClient {
             report = null;
           }
         }
+        final Object? rawParserState = message[GrblWorkerKey.parserState];
+        ParserState? parserState;
+        if (rawParserState is Map<String, Object?>) {
+          try {
+            parserState = ParserState.fromJson(rawParserState);
+          } on FormatException {
+            parserState = null;
+          }
+        }
         if (!_persistRequests.isClosed) {
           _persistRequests.add(
             WorkerPersistRequest(
               id: id,
               status: report,
+              parserState: parserState,
               confirmPersisted: () {
                 _toWorker?.send(<String, Object?>{
                   GrblWorkerKey.command: GrblWorkerCommand.persistDone,

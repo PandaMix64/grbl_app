@@ -53,4 +53,5 @@ abstract final class GrblWorkerKey {
   static const String toolOnLine = 'toolOnLine';
   static const String settleMs = 'settleMs';
   static const String ports = 'ports';
+  static const String parserState = 'parserState';
 }

@@ -34,12 +34,16 @@ class GrblWorker {
     required this.toClient,
     required SerialPortRepository port,
     int bufferSize = kDefaultRxBufferSize,
+    this.persistTimeout = const Duration(seconds: 20),
   }) : _service = GrblSerialService(port: port, bufferSize: bufferSize) {
     _forwardEvents();
   }
 
   final SendPort toClient;
   final GrblSerialService _service;
+
+  /// Tiempo máximo que el worker espera la confirmación de guardado.
+  final Duration persistTimeout;
 
   ReceivePort? _inbox;
   StreamSubscription<StatusReport>? _statusSub;
@@ -182,17 +186,26 @@ class GrblWorker {
 
   /// Pausa, exige la confirmación de guardado y solo entonces resetea.
   Future<void> _stopWithPersistence(Object? id) async {
+    ParserState? parserState;
     await _service.stopJob(
       persistProgress: (StatusReport? report) async {
+        // En Hold la máquina está quieta, así que `$G` es legible: el estado
+        // modal es imprescindible para reanudar con seguridad (SEG-05).
+        try {
+          parserState = await _service.readParserState();
+        } on GrblProtocolException {
+          parserState = null;
+        }
         final Completer<void> ack = Completer<void>();
         _persistAck = ack;
         toClient.send(<String, Object?>{
           GrblWorkerKey.event: GrblWorkerEvent.persistRequest,
           GrblWorkerKey.id: id,
           GrblWorkerKey.line: report?.raw,
+          GrblWorkerKey.parserState: parserState?.toJson(),
         });
         await ack.future.timeout(
-          const Duration(seconds: 20),
+          persistTimeout,
           onTimeout: () => throw const GrblSafetyException(
             'El cliente no confirmó el guardado del progreso: no se envía el '
             'soft reset y la máquina permanece en Hold con la herramienta '
