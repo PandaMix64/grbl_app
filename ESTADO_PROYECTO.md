@@ -395,6 +395,53 @@ Recuperación de la sesión: `git log --oneline --grep="S-07"`.
 
 ---
 
+### S-08 — 2026-11-24 · Ejecución desde el visor, pausa y reanudación (M3.2)
+
+**Alcance:** M3.2 completo: enviar el programa del visor con la holgura aplicada, pintar el avance real, pausar **persistiendo** el punto de reanudación y reanudar solo si `$G`/`$#` coinciden con lo guardado.
+
+**Entregado**
+
+| # | Cambio | Archivo(s) | Estado |
+| :--- | :--- | :--- | :--- |
+| 1 | `streamProgram` con progreso por `ok` confirmados y `cancelProgram` | `lib/data/serial/grbl_serial_service.dart` | ✅ |
+| 2 | Comandos `streamProgram`, `pauseJob` y `resumeJob`; evento `progress` | `lib/data/serial/{grbl_worker,grbl_worker_client,grbl_worker_protocol}.dart` | ✅ |
+| 3 | Consultas `$G`/`$#` **directas** al puerto (`direct: true`) válidas en `Hold` | `lib/data/serial/grbl_serial_service.dart` | ✅ |
+| 4 | `$#` dentro del `persistRequest`; `ResumeState.offsets` | `lib/data/serial/grbl_worker.dart`, `lib/domain/entities/project_file.dart` | ✅ |
+| 5 | Esquema Drift **v2** con `resume_offsets` y migración `addColumn` | `lib/data/database/app_database.dart` | ✅ |
+| 6 | `BacklashCompensationResult.lineIndexes`: mapa salida → línea de origen | `lib/domain/services/backlash_compensator.dart` | ✅ |
+| 7 | `ExecutionController`: compensar, guardar proyecto, enviar, pausar, reanudar y detener | `lib/features/viewer/execution_controller.dart` | ✅ |
+| 8 | `ExecutionBar` con progreso, estado y confirmaciones de ejecutar/detener | `lib/features/viewer/widgets/execution_bar.dart` | ✅ |
+| 9 | Progreso pintado en el lienzo (`executedUpToLine`) y texto fuente en el visor | `lib/features/viewer/{viewer_page,viewer_controller}.dart` | ✅ |
+| 10 | `confirmAction` movido a `core/widgets` para reutilizarlo | `lib/core/widgets/confirm_dialog.dart` | ✅ |
+| 11 | 10 pruebas nuevas (187 en verde, 1 saltada) + `ackDelay` y `Hold` realista en el emulador | `test/features/execution_controller_test.dart`, `test/helpers/fake_serial_port.dart`, `test/widget_test.dart` | ✅ |
+
+**Verificaciones ejecutadas:** `dart format .` → 0 cambios · `flutter analyze` → *No issues found* · `flutter test` → **187 en verde, 1 saltada** (`flutter_libserialport` fuera de un build de la app).
+
+**Decisiones de diseño**
+
+- **Pausa ≠ detención.** La pausa deja intacto el búfer de GRBL y se reanuda con `0x9E` (reactivar herramienta) + `~`; reenviar líneas duplicaría el trabajo. Detener sí resetea y descarta.
+- El progreso se deriva de los `ok` reales, no de líneas escritas: un programa "enviado" no está ejecutado.
+- Las consultas de estado en `Hold` se escriben **directamente** al puerto: las líneas del programa en vuelo no se confirman y el búfer interno nunca se vaciaría.
+- Un `ok` suelto ya no cierra una consulta sin respuesta; era la causa de persistir `$#` vacío y rechazar toda reanudación.
+- Si `$G`/`$#` no se pueden leer, se guarda `null` y la reanudación avisa en vez de inventar estado.
+
+**Decisiones tomadas:** ADR-024, ADR-025, ADR-026, ADR-027.
+
+**Trazabilidad (commits de S-08):**
+
+| Hash | Commit |
+| :--- | :--- |
+| `331cc73` | `feat(serial): progreso confirmado, pausa persistente y reanudacion segura` |
+| `ffd603b` | `feat(persistencia): guarda los offsets del punto de reanudacion` |
+| `970ac8f` | `feat(viewer): ejecuta el programa con holgura y progreso real` |
+| `7c6abd6` | `test: cubre ejecucion, pausa con persistencia y reanudacion verificada` |
+
+Recuperación de la sesión: `git log --oneline --grep="S-08"`.
+
+**Abierto al cierre:** flujo "reiniciar trabajo guardado" tras un `stop` (hoy exige re-homing y volver a enviar desde el visor) y la limpieza automática de la ejecución si se pierde el USB (R-19). La guía de la primera prueba con hardware está en `docs/prueba_banco.md`.
+
+---
+
 ## 5. Decisiones de arquitectura (ADR resumidas)
 
 | ID | Decisión | Motivo | Consecuencia |
@@ -422,6 +469,10 @@ Recuperación de la sesión: `git log --oneline --grep="S-07"`.
 | ADR-021 | La holgura se compensa con un movimiento extra en la dirección nueva; Z y arcos excluidos | Físicamente consume el juego mecánico sin falsear coordenadas | El post-procesador se aplicará al G-code antes de enviarlo (Fase 3) |
 | ADR-022 | El visor simula coordenadas de trabajo y **avisa** de `G28`/`G30`/`G53`/`G92` | Simular esos códigos requeriría modelar offsets y homing, y una simulación incorrecta es peor que ninguna | El intérprete acumula avisos que la UI muestra como "N avisos" |
 | ADR-023 | Render en tres lotes con `drawRawPoints(PointMode.lines)` y proyección propia | Evita un motor 3D y mantiene un `Paint` por categoría; escalable a cientos de miles de segmentos | La proyección se recalcula por frame (aceptable); si molesta, cachear por vista |
+| ADR-024 | El progreso cuenta `ok` confirmados y se mapea a la línea de origen con `lineIndexes` | «Enviado» no es «ejecutado», y las compensaciones inyectadas desplazan los índices | Cada línea de salida declara su línea de origen; el pintor nunca retrocede |
+| ADR-025 | Pausa conserva el búfer y se reanuda con `0x9E` + `~`; detener resetea | Reenviar líneas tras una pausa duplicaría bloques que GRBL aún tiene en el planner | `resumeJob` no envía G-code; el reinicio tras `stop` es un flujo aparte |
+| ADR-026 | `$G`/`$#` se leen escribiendo directo al puerto y solo un `ok` con respuesta cierra la consulta | En `Hold` las líneas en vuelo no se confirman y los `ok` sueltos cerraban la consulta vacía | Se puede persistir el estado modal sin desbloquear el búfer |
+| ADR-027 | El punto de reanudación incluye `$#` (Drift v2 con `addColumn`) | SEG-05 exige comparar offsets: cambiar `G54`/`G92` movería la pieza | Migración aditiva; si no se pudo leer, se guarda `null` y se avisa |
 
 ---
 
@@ -455,18 +506,20 @@ Recuperación de la sesión: `git log --oneline --grep="S-07"`.
 | R-13 | La conexión desde la UI se cubre en tests de controlador, no con un widget test que pulse «Conectar» | Un fallo de cableado UI ↔ controlador no se detectaría en CI | Prueba E2E en build con hardware (R-10) y revisión manual al integrar la Fase 2 | 🟡 Vigilado |
 | R-14 | El jog es por pasos discretos: no hay modo continuo al mantener pulsado | Posicionamiento fino incómodo en recorridos largos | Implementar el bucle incremental `s = v·dt` de `jogging.md` cuando la UI esté estable | 🟡 Vigilado |
 | R-15 | El perfil activo aún no se aplica a la conexión ni al post-procesado | Cambios de perfil no afectan a la ejecución | Cerrado en S-06: perfil compartido, comparado al conectar y aplicable a la EEPROM | ✅ Cerrado |
-| R-16 | La compensación de holgura no cubre arcos ni el eje Z, y todavía no se aplica al ejecutar | Desviación residual en contornos con arcos | Los arcos ya se subdividen a segmentos en el visor; falta aplicar el compensador al enviar (M3.2) | 🟡 Vigilado |
+| R-16 | La compensación de holgura no cubre arcos ni el eje Z, y todavía no se aplica al ejecutar | Desviación residual en contornos con arcos | Cerrado en S-08: `ExecutionController` compensa antes de enviar y cuenta las inyecciones | ✅ Cerrado |
 | R-17 | El intérprete es síncrono: un archivo de 100 000 líneas puede congelar la UI | Mala experiencia con trabajos grandes | Mover el parseo a un isolate (Fase 5 o antes si se nota) | 🟡 Vigilado |
+| R-18 | Tras **detener** no se ofrece reanudar: hace falta re-homing y reenviar desde el visor | Trabajo interrumpido exige preparación manual | Diseñar el flujo "reiniciar trabajo guardado" con verificación de `$G`/`$#` y origen | 🟡 Abierto |
+| R-19 | Si se pierde el USB durante la ejecución, el estado de ejecución no se limpia solo | UI mostrando «Ejecutando» con la máquina desconectada | Al pasar a `Disconnected`, cancelar suscripciones y marcar el trabajo como interrumpido | 🟡 Abierto |
 
 ---
 
 ## 8. Próximos pasos (orden estricto)
 
-1. **M3.2 — Ejecución desde el visor**: enviar el programa con `BacklashCompensator` aplicado, progreso por índice de línea y pintado de lo ejecutado.
-2. **Pausa real**: `WorkerPersistRequest` → `ProjectRepository.persistAndConfirm` → confirmación (cierra SEG-05 en la práctica).
-3. **Reanudación**: comparar `$G`/`$#` con `ResumeState` y ofrecer reinicio seguro si divergen.
-4. **Alertas de pausa/detención** con las tres consecuencias y confirmación explícita.
-5. Prueba de humo en build de escritorio cuando la UI esté completa (R-10).
+1. **Prueba de banco (R-10)**: `flutter run -d windows` con Arduino + GRBL 1.1h; recorrer conexión → calibración → visor → ejecutar/pausar/reanudar y anotar resultados.
+2. **Reiniciar trabajo guardado** (R-18): cargar el proyecto de la base y reenviar desde `ResumeState.lineIndex` con verificación de `$G`/`$#` y origen.
+3. **Limpieza ante desconexión** (R-19): cancelar suscripciones y marcar el trabajo como interrumpido.
+4. **M3.3 — CAM básico**: importar DXF/SVG, pestañas y mecanizado por pasadas reutilizando `BacklashCompensator`.
+5. **Alertas de pausa/detención** ampliadas con las tres consecuencias de `docs/seguridad_operativa.md` (hoy resumidas en el diálogo de detención).
 6. `CHANGELOG.md`, licencia y `NOTICE` con la atribución GPLv3 de GRBL.
 7. Push al remoto para ejecutar el CI (R-08).
 

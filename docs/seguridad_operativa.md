@@ -98,21 +98,41 @@ y nunca desde el valor objetivo.
 
 ## 6. Secuencia: Reanudar tras pausa
 
+Hay **dos** reanudaciones distintas y no se deben mezclar:
+
+### 6.1 Reanudar una pausa (`Hold`, mismo programa)
+
 **Precondición:** estado `Hold`, herramienta apagada, progreso persistido y posición verificada.
-**Postcondición:** ejecución continua desde la línea guardada, sin salto geométrico.
+**Postcondición:** ejecución continua desde donde se detuvo, sin salto geométrico ni líneas duplicadas.
 
 1. Leer `$G` (estado modal) y `$#` (offsets) y compararlos con lo guardado. Si difieren, **no**
    reanudar: ofrecer "reiniciar desde el inicio con secuencia segura".
-2. Si hay `Alarm`, enviar `$X`; sin homing no se reanuda.
-3. Elevar Z a la altura segura del perfil (`G0 Z<safeZ>` explícito, en `G90`).
-4. Posicionar XY en la coordenada de trabajo guardada, solo si está dentro del volumen del perfil.
-5. Reactivar la herramienta con el mismo código y potencia (`M3`/`M4` + `S`) y **esperar la
+2. Reactivar la herramienta con `0x9E` (toggle realtime) y esperar un reporte con `S > 0`. Si no se
+   confirma, no enviar cycle start.
+3. Enviar `~` (cycle start) y verificar la transición a `Run`.
+4. **No reenviar G-code**: GRBL conserva en su planificador los bloques ya recibidos y los ejecutará
+   al reanudar. Reenviarlos duplicaría el trabajo.
+
+Esta secuencia es la que implementa `resumeProgram` (`0x9E` + `~`) y la que usa `ExecutionController`
+al pulsar «Reanudar».
+
+### 6.2 Reiniciar tras detener (`stop` → `Alarm`/`Idle`)
+
+Detener envía `0x18`, así que la posición y el estado del parser se pierden. En este caso:
+
+1. `$X` si hay `Alarm`; sin homing no se reanuda.
+2. Elevar Z a la altura segura del perfil (`G0 Z<safeZ>` explícito, en `G90`).
+3. Posicionar XY en la coordenada de trabajo guardada, solo si está dentro del volumen del perfil.
+4. Reactivar la herramienta con el mismo código y potencia (`M3`/`M4` + `S`) y **esperar la
    estabilización** (≥ 4 s o el valor del perfil).
-6. Enviar `~` (cycle start) y verificar la transición a `Run`.
-7. Reanudar el streaming desde el índice guardado, con el conteo de caracteres reiniciado.
+5. Enviar `~` (cycle start) y verificar la transición a `Run`.
+6. Reenviar el programa desde el índice guardado, con el conteo de caracteres reiniciado.
 
 **Nunca** reanudar con `~` sin reactivar la herramienta antes: GRBL restaura el estado previo del
 husillo y aplica su propio retardo, pero la app no debe depender de esa red de seguridad.
+
+> Estado actual: 6.1 está implementada y probada. 6.2 está documentada pero la UI aún no la ofrece
+> (riesgo R-18): tras «Detener» hay que volver a preparar la máquina y reenviar desde el visor.
 
 ---
 
@@ -165,8 +185,8 @@ Reglas:
 | SEG-02 | El worker nunca envía `M5`/`S0` mientras el estado reportado sea `Run` | `GrblSerialService` solo usa `0x9E` (solo efectivo en `Hold`); no existe camino de código que envíe `M5` |
 | SEG-03 | Ningún camino de código alcanza `0x18` sin persistencia previa del progreso | `stopJob` exige `persistProgress`; test *no se resetea sin persistir el progreso (SEG-03)* |
 | SEG-04 | `0x85` se envía solo si el estado reportado es `Jog`; en otro caso se registra y se ignora | tests *cancelar jog se ignora fuera del estado Jog* y *cancelar jog en Jog envía 0x85* |
-| SEG-05 | La reanudación falla de forma segura si `$G`/`$#` difieren de lo guardado | Parcial: `ParserState.isCompatibleWith` y `WorkOffsets.matches` existen y están probados; falta conectarlos al flujo de reanudación (Fase 3) |
-| SEG-06 | El botón "Detener" exige confirmación y enumera las tres consecuencias del §5 | Pendiente: UI de la Fase 1 |
+| SEG-05 | La reanudación falla de forma segura si `$G`/`$#` difieren de lo guardado | `ExecutionController.resume` compara `ParserState.isCompatibleWith` y `WorkOffsets.matches` antes de reanudar; tests *la reanudación se niega si el estado modal cambió* y *…si los offsets cambiaron* |
+| SEG-06 | El botón "Detener" exige confirmación y enumera las tres consecuencias del §5 | `ExecutionBar` pide confirmación y resume las consecuencias antes de `stop()`; test *la barra de ejecución aparece deshabilitada sin conexión* |
 
 ### 9.1 Criterios de flujo de datos
 

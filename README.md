@@ -13,7 +13,7 @@ Flutter + Material Design 3, Clean Architecture con gestión de estado reactiva,
 | Fase 0 — Fundaciones | ✅ Cerrada |
 | Fase 1 — Núcleo y Serial | ✅ Cerrada |
 | Fase 2 — Calibración | ✅ Cerrada |
-| Fase 3 — Visor 3D | 🟡 En curso (intérprete y visor listos) |
+| Fase 3 — Visor 3D | 🟡 En curso (visor y ejecución listos) |
 | Fase 4 — Generador CAM | ⬜ Pendiente |
 | Fase 5 — Optimización y empaquetado | ⬜ Pendiente |
 
@@ -121,6 +121,18 @@ El módulo de Calibración permite:
 
 - Arrastrar desplaza, pellizcar/rueda acerca, girar rota y doble toque restablece la vista.
 - Los códigos que cambian el sistema de coordenadas (`G28`, `G30`, `G53`, `G92`) **no se simulan**: se muestran como avisos.
+
+## Ejecución
+
+La barra de ejecución del visor envía el programa con la **holgura del perfil aplicada** (movimientos
+`G1` cortos en cada inversión de sentido, nunca `G92`), pinta el avance real por línea confirmada y
+permite pausar, reanudar y detener:
+
+- **Pausa** (`!` → `0x9E`): guarda línea, `$G`, `$#` y posición en SQLite antes de confirmar; GRBL queda
+  en `Hold` con la herramienta apagada.
+- **Reanudar**: verifica `$G`/`$#` contra lo guardado, reactiva la herramienta con `0x9E` y envía `~`.
+  No reenvía G-code: GRBL conserva su planificador.
+- **Detener** (`0x18`): pide confirmación con las consecuencias y resetea el controlador.
 
 ## Persistencia
 
