@@ -790,6 +790,15 @@ Recuperación de la sesión: `git log --oneline --grep="S-16"`.
 
 **Decisiones tomadas:** ADR-045.
 
+**Trazabilidad (commits de S-17):**
+
+| Hash | Commit |
+| :--- | :--- |
+| `bc44fe3` | `feat(plot): suaviza diagonales conservando las esquinas` |
+| `61a8a21` | `docs: documenta el suavizado del trazado` |
+
+Recuperación de la sesión: `git log --oneline --grep="S-17"`.
+
 ---
 
 ## 5. Decisiones de arquitectura (ADR resumidas)
