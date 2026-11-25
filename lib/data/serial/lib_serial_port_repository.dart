@@ -164,6 +164,11 @@ class LibSerialPortRepository implements SerialPortRepository {
   void _write(List<int> data) {
     final SerialPort? port = _port;
     if (port == null) {
+      if (_closing) {
+        // Una respuesta tardía puede intentar escribir mientras se cierra el
+        // puerto: se descarta en silencio para no tumbar el isolate.
+        return;
+      }
       throw const SerialPortException('No hay puerto abierto.');
     }
     final Uint8List bytes = Uint8List.fromList(data);
