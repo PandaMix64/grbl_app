@@ -76,6 +76,8 @@ El riesgo principal del plan no es de arquitectura, sino de **seguridad operativ
 - Aplicar la compensación **sólo** en el post-procesador de exportación/ejecución, nunca en Z, y dejarla desactivable por perfil.
 - Registrar en el `.cncproj` la holgura aplicada y el número de compensaciones inyectadas, para auditar desviaciones.
 
+> **Implementado en S-06:** `lib/domain/services/backlash_compensator.dart` (con pruebas de inversión de sentido, exclusión de Z y respeto del avance). El origen de trabajo usa `G10 L20 P1`, no `G92` (ADR-020).
+
 **Criterio de aceptación.** Un cuadrado de 100 mm ejecutado con holgura de 0,3 mm por eje debe medir 100 mm ± 0,05 mm, y la prueba debe poder repetirse tras un soft reset sin perder la compensación.
 
 ### P0-3. Faltan los comandos de cancelación y de parada correctos

@@ -181,5 +181,7 @@ Reglas:
 | SEG-07 | El jog solo se envía en `Idle` o `Jog`, siempre con `F` | `JogCommand.validate()` + guardia en `GrblSerialService.jog`; tests *rechaza el jog fuera de Idle/Jog* y *valida ejes y avance* |
 | SEG-08 | La escritura en EEPROM envía solo los parámetros que cambian | `GrblSettings.diff` en `CalibrationController.applyDraft`; test *solo escribe los parámetros que cambian* |
 | SEG-09 | Una calibración de pasos/mm se rechaza si la medida no es plausible | `StepsPerMmCalibration.validate()` (±50 %); test *rechaza medidas imposibles sin escribir* |
+| SEG-10 | El origen de trabajo se fija con `G10 L20 P1` y nunca con `G92` | `GrblSerialService.setWorkZero`; test *fija el cero en G54 con G10 L20 P1*. Bloqueado en `Alarm` |
+| SEG-11 | La holgura se compensa con movimiento real, nunca falseando coordenadas | `BacklashCompensator`; tests de inversión de sentido, sin compensar Z ni la primera pasada |
 
 

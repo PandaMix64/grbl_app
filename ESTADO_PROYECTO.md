@@ -9,11 +9,11 @@
 | :--- | :--- |
 | Proyecto | `grbl_app` — entorno CNC con Flutter + GRBL v1.1h |
 | Repositorio | Git local, rama `main` (inicializado 2026-11-24) |
-| Sesión actual | **S-05 (cerrada)** |
-| Fase actual | **Fase 2 — Calibración (en curso)** |
-| Avance global estimado | ~68 % |
+| Sesión actual | **S-06 (cerrada)** |
+| Fase actual | **Fase 2 cerrada · siguiente: Fase 3 (Visor 3D)** |
+| Avance global estimado | ~75 % |
 | Bloqueos | Ninguno. Prueba en banco pospuesta (R-10) |
-| Siguiente hito | **M2.2** — compensación de holgura con movimiento real + perfiles aplicados a la ejecución |
+| Siguiente hito | **M3.1** — intérprete de G-code a segmentos y renderizado con `CustomPainter` |
 
 ---
 
@@ -32,7 +32,8 @@
 | :--- | :--- | :--- | :--- |
 | **Fase 0: Fundaciones** | Repo, entorno, contratos de dominio, fachada serial, política de seguridad | 🟢 **Cerrada salvo licencia y CHANGELOG** | Añadida por la revisión técnica; M0.1–M0.3 entregados en S-02 |
 | **Fase 1: Núcleo y Serial** | Clean Architecture, esquema SQLite, navegación M3, isolate serial con *character-counting* | ✅ **Cerrada** | Conexión, handshake, worker, Drift, providers y barra de conexión entregados |
-| **Fase 2: Calibración** | Jogging, pasos/mm, parámetros `$`, perfiles y *backlash* | 🟡 **En curso (~45 %)** | Jogging, parámetros, pasos/mm y CRUD de perfiles entregados; falta *backlash* y aplicar perfiles |
+| **Fase 2: Calibración** | Jogging, pasos/mm, parámetros `$`, perfiles y *backlash* | ✅ **Cerrada** | Jogging, parámetros, pasos/mm, perfiles, holgura, homing y origen |
+| **Fase 3: Visor 3D** | Renderizado, interpretación de G-code, pausa/detención y reanudación segura | 🟡 **Siguiente** | `ResumeState`, `MotionSegment` y `ProjectRepository` ya existen; falta el intérprete y el render |
 | **Fase 3: Visor 3D** | Renderizado, interpretación de G-code, pausa/detención y reanudación segura | ⬜ Pendiente | `ResumeState` y `MotionSegment` ya existen; falta persistencia y render |
 | **Fase 4: Generador CAM** | Imagen → G-code (vectorización, dithering, relieve 2.5D) | ⬜ Pendiente | Modo láser requiere `$32` (P1-1) |
 | **Fase 5: Optimización y Empaquetado** | Rendimiento, atajos, builds Windows/Linux/macOS/Android | ⬜ Pendiente | — |
@@ -90,11 +91,16 @@ Leyenda: 🟡 en curso · ✅ cerrada · ⬜ pendiente · 🔴 bloqueada
 - [x] Calibración de pasos/mm guiada (avance teórico vs. medido)
 - [x] CRUD de perfiles de máquina sobre Drift
 
-### M2.2 Compensación y aplicación de perfiles — siguiente
-- [ ] Post-procesador de *backlash* con movimiento real (nunca `G92`, ver P0-2)
-- [ ] Prueba guiada de holgura por eje (avanzar/retroceder 5 mm y medir)
-- [ ] Aplicar el perfil activo a la conexión (comparar con la EEPROM al conectar)
-- [ ] Homing (`$H`) y definición de origen de trabajo desde la UI
+### M2.2 Compensación y aplicación de perfiles (cerrada en S-06)
+- [x] Post-procesador de *backlash* con movimiento real (nunca `G92`, ver P0-2)
+- [x] Prueba guiada de holgura por eje (avanzar/retroceder y medir), guardada en el perfil
+- [x] Aplicar el perfil activo a la conexión (perfil compartido + escritura por diferencias)
+- [x] Homing (`$H`) y definición de origen de trabajo (`G10 L20 P1`)
+
+### M3.1 Visor — siguiente
+- [ ] Intérprete de G-code a `MotionSegment` (incluida conversión de arcos `R` a `I`/`J`)
+- [ ] Renderizado con `CustomPainter` y `drawRawPoints` por lotes (ejecutado/pendiente/rápido)
+- [ ] Cabezal sincronizado con la telemetría y volumen de trabajo del perfil
 
 ---
 
@@ -302,6 +308,34 @@ Recuperación de la sesión: `git log --oneline --grep="S-05"`.
 
 ---
 
+### S-06 — 2026-11-24 · Holgura, perfil aplicado, homing y origen (M2.2 · Fase 2 cerrada)
+
+**Alcance:** M2.2 completo: compensación de holgura con movimiento real, prueba guiada de holgura, perfil activo compartido y aplicable a la máquina, homing y definición de origen.
+
+**Entregado**
+
+| # | Cambio | Archivo(s) | Estado |
+| :--- | :--- | :--- | :--- |
+| 1 | `BacklashCompensator`: inyecta un `G1` de la holgura al invertir sentido; nunca Z ni arcos | `lib/domain/services/backlash_compensator.dart` | ✅ |
+| 2 | `BacklashEstimate`: ida/vuelta con validación (±50 %, no negativa) | `lib/domain/services/backlash_estimate.dart` | ✅ |
+| 3 | `setWorkZero` con `G10 L20 P1` (servicio, worker y cliente), bloqueado en `Alarm` | `lib/data/serial/*` | ✅ |
+| 4 | `activeProfileIdProvider` / `activeProfileProvider`: la conexión compara el perfil **elegido** | `lib/app/providers.dart`, `connection_controller.dart` | ✅ |
+| 5 | Controlador: holgura→perfil, aplicar perfil (`$32`, `$30`, `$130-$132` por diferencias), homing, origen | `lib/features/calibration/calibration_controller.dart` | ✅ |
+| 6 | UI: panel de origen/homing y de holgura con confirmaciones, botón «Aplicar perfil» | `lib/features/calibration/widgets/` | ✅ |
+| 7 | 26 pruebas nuevas (150 en total, 1 saltada) | `test/domain/`, `test/serial/`, `test/features/` | ✅ |
+
+**Verificaciones ejecutadas:** `flutter analyze` → *No issues found* · `flutter test` → **150 en verde, 1 saltada** · `dart format` → 0 cambios.
+
+**Criterio de diseño clave:** al invertir el sentido, la mesa va retrasada respecto al motor, así que un movimiento extra de `holgura` en la dirección nueva consume el juego y el bloque siguiente mueve la mesa exactamente lo ordenado. Todo ocurre en coordenadas de motor: no se falsea ningún origen ni se usa `G92` (P0-2 resuelto).
+
+**Incidente de sesión:** al reemplazar un bloque de pruebas se eliminó sin querer el caso *un error: al escribir no se silencia*; se detectó al ejecutar la suite y se restauró.
+
+**Decisiones tomadas:** ADR-019, ADR-020, ADR-021.
+
+**Abierto al cierre:** el compensador aún no está conectado al flujo de ejecución (no existe ejecución hasta la Fase 3); arcos y Z quedan fuera por diseño (R-16).
+
+---
+
 ## 5. Decisiones de arquitectura (ADR resumidas)
 
 | ID | Decisión | Motivo | Consecuencia |
@@ -324,6 +358,9 @@ Recuperación de la sesión: `git log --oneline --grep="S-05"`.
 | ADR-016 | Providers escritos a mano (`Provider`/`NotifierProvider`), sin `@riverpod` todavía | La superficie de estado es pequeña y se lee mejor explícita; `riverpod_generator` queda disponible para features grandes | Si el número de providers crece, migrar a codegen en un cambio dedicado |
 | ADR-017 | El enum de ejes se llama `MachineAxis`, no `Axis` | `Axis` colisiona con el `Axis` de Flutter en cualquier archivo que importe la UI | Los widgets usan `MachineAxis` sin `hide`; los parámetros se siguen llamando `axis` |
 | ADR-018 | `connectAndIdentify` espera la primera telemetría (≤ 2 s) antes de devolver | Sin estado real, el jog y las consultas se rechazaban justo tras conectar | Si no llega telemetría se conecta igual, pero la UI lo verá en `unknown` |
+| ADR-019 | El perfil activo se guarda en `activeProfileIdProvider`, no dentro de la conexión | Evita el ciclo conexión → calibración → conexión | Ambos controladores leen el mismo id; la conexión resuelve el perfil por id |
+| ADR-020 | El origen de trabajo se fija con `G10 L20 P1`, nunca con `G92` | `G92` no persiste y puede disparar `ALARM:2` con soft limits (P0-2) | La UI no expone `G92` en ningún flujo |
+| ADR-021 | La holgura se compensa con un movimiento extra en la dirección nueva; Z y arcos excluidos | Físicamente consume el juego mecánico sin falsear coordenadas | El post-procesador se aplicará al G-code antes de enviarlo (Fase 3) |
 
 ---
 
@@ -356,19 +393,21 @@ Recuperación de la sesión: `git log --oneline --grep="S-05"`.
 | R-12 | La persistencia (Drift) aún no existe: `persistProgress` solo puede confirmar de memoria | El ack de SEG-03 no garantiza durabilidad todavía | Cerrado en S-04: `ProjectRepository.persistAndConfirm` escribe en SQLite antes de confirmar | ✅ Cerrado |
 | R-13 | La conexión desde la UI se cubre en tests de controlador, no con un widget test que pulse «Conectar» | Un fallo de cableado UI ↔ controlador no se detectaría en CI | Prueba E2E en build con hardware (R-10) y revisión manual al integrar la Fase 2 | 🟡 Vigilado |
 | R-14 | El jog es por pasos discretos: no hay modo continuo al mantener pulsado | Posicionamiento fino incómodo en recorridos largos | Implementar el bucle incremental `s = v·dt` de `jogging.md` cuando la UI esté estable | 🟡 Vigilado |
-| R-15 | El perfil activo aún no se aplica a la conexión ni al post-procesado | Cambios de perfil no afectan a la ejecución | M2.2: comparar perfil ↔ EEPROM al conectar y usar el perfil en el post-procesador | 🔴 Abierto |
+| R-15 | El perfil activo aún no se aplica a la conexión ni al post-procesado | Cambios de perfil no afectan a la ejecución | Cerrado en S-06: perfil compartido, comparado al conectar y aplicable a la EEPROM | ✅ Cerrado |
+| R-16 | La compensación de holgura no cubre arcos ni el eje Z, y todavía no se aplica al ejecutar | Desviación residual en contornos con arcos | Documentado en `BacklashCompensator`; los arcos se convertirán a segmentos en la Fase 3 y Z queda excluido a propósito | 🟡 Vigilado |
 
 ---
 
 ## 8. Próximos pasos (orden estricto)
 
-1. **Post-procesador de holgura**: inyectar micro-movimientos reales al cambiar de sentido (nunca `G92`, P0-2) y cubrirlo con un test de geometría.
-2. **Prueba guiada de holgura** por eje en la UI: avanzar/retroceder 5 mm, capturar la medida y guardarla en el perfil.
-3. **Aplicar el perfil a la conexión**: al conectar, comparar `$130-$132`, `$32` y pasos/mm con el perfil activo y ofrecer corregir.
-4. **Homing y origen** desde la UI (`$H`, `G10 L20`, `G92` desaconsejado): definir cero de trabajo con confirmación.
+1. **M3.1 — Intérprete de G-code**: de texto a `MotionSegment` (G0/G1, subdivisión de arcos `G2/G3` con `R`→`I`/`J`, unidades y offsets), con tests.
+2. **Visor**: `CustomPainter` con `drawRawPoints` en tres lotes (rápido, pendiente, ejecutado), zoom/pan y volumen del perfil.
+3. **Ejecución**: aplicar `BacklashCompensator` antes de enviar, streaming desde el visor y progreso por índice de línea.
+4. **Pausa/stop desde el visor** conectando `WorkerPersistRequest` con `ProjectRepository` (cierra SEG-05 y R-12 en la práctica).
 5. Prueba de humo en build de escritorio cuando la UI esté completa (R-10).
 6. `CHANGELOG.md`, licencia y `NOTICE` con la atribución GPLv3 de GRBL.
 7. Push al remoto para ejecutar el CI (R-08).
+
 
 
 

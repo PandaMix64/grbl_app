@@ -12,8 +12,8 @@ Flutter + Material Design 3, Clean Architecture con gestión de estado reactiva,
 | :--- | :--- |
 | Fase 0 — Fundaciones | ✅ Cerrada |
 | Fase 1 — Núcleo y Serial | ✅ Cerrada |
-| Fase 2 — Calibración | 🟡 En curso (jog, parámetros, pasos/mm y perfiles) |
-| Fase 3 — Visor 3D | ⬜ Pendiente |
+| Fase 2 — Calibración | ✅ Cerrada |
+| Fase 3 — Visor 3D | 🟡 Siguiente |
 | Fase 4 — Generador CAM | ⬜ Pendiente |
 | Fase 5 — Optimización y empaquetado | ⬜ Pendiente |
 
@@ -110,7 +110,9 @@ El módulo de Calibración permite:
 - **Jogging** con `$J=` (el avance `F` es obligatorio en cada comando) y cancelación con `0x85`; solo se acepta en `Idle`/`Jog`.
 - **Parámetros `$`**: lectura de la EEPROM y escritura **solo de los valores que cambian** (`GrblSettings.diff`), con un `ok` por parámetro.
 - **Pasos/mm**: se ordena un avance de 10 mm, se mide el desplazamiento real y la app calcula y escribe `nuevo = actual × 10 / medido` (rechaza medidas fuera del ±50 %).
-- **Perfiles**: alta, edición y borrado con validación de volumen, altura segura, holgura y herramienta.
+- **Perfiles**: alta, edición y borrado con validación de volumen, altura segura, holgura y herramienta, más un botón para **aplicar** el perfil a la EEPROM (`$32`, `$30`, `$130-$132`), escribiendo solo lo que difiere.
+- **Holgura**: prueba guiada (ida y vuelta con jog), estimación y guardado en el perfil. La compensación se aplica con movimiento real (`BacklashCompensator`), nunca con `G92`.
+- **Homing y origen**: `$H` y `G10 L20 P1` (cero de G54 persistente), siempre con confirmación explícita.
 
 ## Persistencia
 
