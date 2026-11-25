@@ -1,10 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../../core/widgets/confirm_dialog.dart';
 import '../../../domain/entities/axis.dart';
 import '../../connection/connection_controller.dart';
 import '../calibration_controller.dart';
-import 'confirm_dialog.dart';
 
 /// Homing (`$H`) y definición del cero de trabajo (`G10 L20 P1`, nunca `G92`).
 class OriginPanel extends ConsumerStatefulWidget {

@@ -9,12 +9,16 @@ import '../../domain/services/gcode_interpreter.dart';
 class ViewerUiState {
   const ViewerUiState({
     this.program,
+    this.source,
     this.fileName,
     this.isLoading = false,
     this.error,
   });
 
   final GcodeProgram? program;
+
+  /// Texto original del programa (necesario para ejecutar y compensar holgura).
+  final String? source;
   final String? fileName;
   final bool isLoading;
   final String? error;
@@ -23,6 +27,7 @@ class ViewerUiState {
 
   ViewerUiState copyWith({
     GcodeProgram? program,
+    String? source,
     String? fileName,
     bool? isLoading,
     String? error,
@@ -31,6 +36,7 @@ class ViewerUiState {
   }) {
     return ViewerUiState(
       program: clearProgram ? null : (program ?? this.program),
+      source: clearProgram ? null : (source ?? this.source),
       fileName: clearProgram ? null : (fileName ?? this.fileName),
       isLoading: isLoading ?? this.isLoading,
       error: clearError ? null : (error ?? this.error),
@@ -81,7 +87,11 @@ G0 Z5
         );
         return;
       }
-      state = ViewerUiState(program: program, fileName: fileName);
+      state = ViewerUiState(
+        program: program,
+        source: source,
+        fileName: fileName,
+      );
     } on Object catch (error) {
       state = ViewerUiState(isLoading: false, error: 'G-code ilegible: $error');
     }

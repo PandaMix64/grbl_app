@@ -1,6 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
-/// Diálogo de confirmación para acciones que mueven la máquina o escriben EEPROM.
+/// Diálogo de confirmación para acciones que mueven la máquina, escriben EEPROM
+/// o descartan progreso.
 Future<bool> confirmAction(
   BuildContext context, {
   required String title,

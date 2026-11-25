@@ -2,9 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../domain/entities/machine_profile.dart';
+import '../../../core/widgets/confirm_dialog.dart';
 import '../../connection/connection_controller.dart';
 import '../calibration_controller.dart';
-import 'confirm_dialog.dart';
 import 'profile_dialog.dart';
 
 /// Lista de perfiles de máquina con creación, edición y borrado.

@@ -2,11 +2,22 @@
 class BacklashCompensationResult {
   const BacklashCompensationResult({
     required this.gcode,
+    required this.lineIndexes,
     required this.compensationsX,
     required this.compensationsY,
-  });
+  }) : assert(
+         gcode.length == lineIndexes.length,
+         'Cada línea de salida necesita su línea de origen',
+       );
 
   final List<String> gcode;
+
+  /// Línea de origen (base 0) de cada línea de salida.
+  ///
+  /// Las compensaciones inyectadas heredan la línea que las provocó, de modo que
+  /// el progreso nunca retrocede.
+  final List<int> lineIndexes;
+
   final int compensationsX;
   final int compensationsY;
 
@@ -46,7 +57,9 @@ class BacklashCompensator {
 
   /// Devuelve el programa con las compensaciones inyectadas.
   BacklashCompensationResult process(Iterable<String> lines) {
+    final List<String> source = lines.toList(growable: false);
     final List<String> output = <String>[];
+    final List<int> outputIndexes = <int>[];
     double x = 0;
     double y = 0;
     double? feed;
@@ -55,10 +68,16 @@ class BacklashCompensator {
     int compensationsX = 0;
     int compensationsY = 0;
 
-    for (final String line in lines) {
+    void emit(String value, int index) {
+      output.add(value);
+      outputIndexes.add(index);
+    }
+
+    for (int index = 0; index < source.length; index++) {
+      final String line = source[index];
       final Map<String, double>? words = _parseWords(line);
       if (words == null) {
-        output.add(line);
+        emit(line, index);
         continue;
       }
 
@@ -70,7 +89,7 @@ class BacklashCompensator {
           words.containsKey('Z');
 
       if (!isLinear || !hasAxis) {
-        output.add(line);
+        emit(line, index);
         continue;
       }
 
@@ -84,16 +103,16 @@ class BacklashCompensator {
 
       if (dirX != 0 && backlashXmm > 0 && lastDirX != 0 && dirX != lastDirX) {
         x += backlashXmm * dirX;
-        output.add('G1 X${_format(x)} F${_format(effectiveFeed)}');
+        emit('G1 X${_format(x)} F${_format(effectiveFeed)}', index);
         compensationsX++;
       }
       if (dirY != 0 && backlashYmm > 0 && lastDirY != 0 && dirY != lastDirY) {
         y += backlashYmm * dirY;
-        output.add('G1 Y${_format(y)} F${_format(effectiveFeed)}');
+        emit('G1 Y${_format(y)} F${_format(effectiveFeed)}', index);
         compensationsY++;
       }
 
-      output.add(line);
+      emit(line, index);
       x = targetX;
       y = targetY;
       if (dirX != 0) {
@@ -107,6 +126,7 @@ class BacklashCompensator {
 
     return BacklashCompensationResult(
       gcode: output,
+      lineIndexes: outputIndexes,
       compensationsX: compensationsX,
       compensationsY: compensationsY,
     );

@@ -7,7 +7,9 @@ import '../../app/providers.dart';
 import '../../domain/entities/gcode_program.dart';
 import '../../domain/entities/machine_profile.dart';
 import '../connection/connection_controller.dart';
+import 'execution_controller.dart';
 import 'viewer_controller.dart';
+import 'widgets/execution_bar.dart';
 import 'widgets/viewer_canvas.dart';
 
 /// Visor de proyectos: carga G-code, lo simula en 3D y sigue la telemetría.
@@ -77,6 +79,8 @@ class ViewerPage extends ConsumerWidget {
             if (state.hasProgram) ...<Widget>[
               const SizedBox(height: 8),
               _ProgramStats(program: state.program!),
+              const SizedBox(height: 12),
+              const ExecutionBar(),
             ],
             const SizedBox(height: 12),
             Expanded(
@@ -86,6 +90,7 @@ class ViewerPage extends ConsumerWidget {
                       connection,
                       profile,
                       theme.colorScheme.outlineVariant,
+                      ref.watch(executionControllerProvider).executedLine,
                     )
                   : _emptyState(theme),
             ),
@@ -100,6 +105,7 @@ class ViewerPage extends ConsumerWidget {
     ConnectionUiState connection,
     MachineProfile? profile,
     Color borderColor,
+    int? executedLine,
   ) {
     final List<double>? workPosition = connection.workPosition;
     return DecoratedBox(
@@ -111,6 +117,7 @@ class ViewerPage extends ConsumerWidget {
         borderRadius: BorderRadius.circular(12),
         child: ViewerCanvas(
           program: program,
+          executedUpToLine: executedLine,
           headPosition: workPosition != null && workPosition.length >= 3
               ? Vector3(workPosition[0], workPosition[1], workPosition[2])
               : null,
