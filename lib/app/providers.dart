@@ -1,9 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/platform_capabilities.dart';
 import '../data/database/app_database.dart';
 import '../data/serial/grbl_worker_client.dart';
 import '../domain/entities/machine_profile.dart';
 import '../domain/entities/project_file.dart';
+
+/// Indica si la conexión serie por USB está disponible en esta plataforma.
+///
+/// En pruebas se sobrescribe para simular un destino sin puerto serie
+/// (Android) sin depender del sistema real.
+final Provider<bool> serialSupportProvider = Provider<bool>(
+  (Ref ref) => PlatformCapabilities.serialSupported,
+);
 
 /// Base de datos local.
 ///

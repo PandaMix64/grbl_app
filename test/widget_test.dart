@@ -145,6 +145,35 @@ void main() {
     expect(runButton.onPressed, isNull);
   });
 
+  testWidgets('sin soporte serie avisa y bloquea la conexión', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          databaseProvider.overrideWithValue(database),
+          grblWorkerProvider.overrideWith((Ref ref) => client),
+          serialSupportProvider.overrideWithValue(false),
+        ],
+        child: const GrblApp(),
+      ),
+    );
+    await settle(tester);
+
+    expect(
+      find.textContaining('En Android no hay conexión USB al GRBL'),
+      findsOneWidget,
+    );
+    expect(find.text('Sin puertos'), findsOneWidget);
+    final FilledButton connect = tester.widget<FilledButton>(
+      find.ancestor(
+        of: find.text('Conectar'),
+        matching: find.byType(FilledButton),
+      ),
+    );
+    expect(connect.onPressed, isNull);
+  });
+
   testWidgets('la barra superior ofrece consola y comandos básicos', (
     WidgetTester tester,
   ) async {

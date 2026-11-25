@@ -76,10 +76,13 @@ class ConnectionUiState {
     bool? positionIsLive,
     bool clearError = false,
     bool clearHandshake = false,
+    bool clearSelectedPort = false,
   }) {
     return ConnectionUiState(
       ports: ports ?? this.ports,
-      selectedPort: selectedPort ?? this.selectedPort,
+      selectedPort: clearSelectedPort
+          ? null
+          : (selectedPort ?? this.selectedPort),
       baudRate: baudRate ?? this.baudRate,
       isBusy: isBusy ?? this.isBusy,
       isConnected: isConnected ?? this.isConnected,
@@ -121,8 +124,22 @@ class ConnectionController extends Notifier<ConnectionUiState> {
   void selectBaudRate(int baudRate) =>
       state = state.copyWith(baudRate: baudRate);
 
+  /// Mensaje único para destinos sin puerto serie (Android).
+  static const String serialUnsupportedMessage =
+      'La conexión por USB no está disponible en Android: prepara el trabajo '
+      'aquí (CAM, plóter, visor) y conéctate a la máquina desde la versión de '
+      'escritorio.';
+
   /// Enumeración de puertos (FFI dentro del worker).
   Future<void> refreshPorts() async {
+    if (!ref.read(serialSupportProvider)) {
+      state = state.copyWith(
+        ports: const <SerialPortInfo>[],
+        clearSelectedPort: true,
+        error: serialUnsupportedMessage,
+      );
+      return;
+    }
     state = state.copyWith(isBusy: true, clearError: true);
     try {
       final GrblWorkerClient client = await ref.read(grblWorkerProvider.future);
@@ -143,6 +160,10 @@ class ConnectionController extends Notifier<ConnectionUiState> {
 
   /// Conecta, ejecuta el handshake y compara el perfil activo con la EEPROM.
   Future<void> connect() async {
+    if (!ref.read(serialSupportProvider)) {
+      state = state.copyWith(error: serialUnsupportedMessage);
+      return;
+    }
     final String? port = state.selectedPort;
     if (port == null || port.isEmpty) {
       state = state.copyWith(error: 'Selecciona un puerto serial.');

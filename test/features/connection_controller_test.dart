@@ -50,6 +50,32 @@ void main() {
     expect(state().isBusy, isFalse);
   });
 
+  test('sin soporte serie (Android) no enumera ni abre el puerto', () async {
+    final ProviderContainer android = ProviderContainer(
+      overrides: [
+        databaseProvider.overrideWithValue(database),
+        grblWorkerProvider.overrideWith((Ref ref) => client),
+        serialSupportProvider.overrideWithValue(false),
+      ],
+    );
+    addTearDown(android.dispose);
+
+    await android.read(connectionControllerProvider.notifier).refreshPorts();
+
+    ConnectionUiState snapshot = android.read(connectionControllerProvider);
+    expect(snapshot.ports, isEmpty);
+    expect(snapshot.selectedPort, isNull);
+    expect(snapshot.error, ConnectionController.serialUnsupportedMessage);
+    expect(snapshot.isBusy, isFalse);
+
+    await android.read(connectionControllerProvider.notifier).connect();
+
+    snapshot = android.read(connectionControllerProvider);
+    expect(snapshot.isConnected, isFalse);
+    expect(snapshot.error, ConnectionController.serialUnsupportedMessage);
+    expect(port.writtenLines, isEmpty);
+  });
+
   test('conecta, hace el handshake y aplica el búfer real', () async {
     await controller().refreshPorts();
 

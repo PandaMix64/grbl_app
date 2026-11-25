@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../../../app/providers.dart';
 import '../../../domain/entities/grbl_handshake.dart';
 import '../../../domain/entities/machine_state.dart';
 import '../../../domain/repositories/serial_port_repository.dart';
@@ -41,6 +42,7 @@ class _ConnectionBarState extends ConsumerState<ConnectionBar> {
     );
     final ThemeData theme = Theme.of(context);
     final bool locked = state.isConnected || state.isBusy;
+    final bool serialSupported = ref.watch(serialSupportProvider);
 
     return Card(
       child: Padding(
@@ -50,7 +52,10 @@ class _ConnectionBarState extends ConsumerState<ConnectionBar> {
           children: <Widget>[
             Row(
               children: <Widget>[
-                Icon(Icons.usb, color: theme.colorScheme.primary),
+                Icon(
+                  serialSupported ? Icons.usb : Icons.usb_off,
+                  color: theme.colorScheme.primary,
+                ),
                 const SizedBox(width: 8),
                 Text('Conexión', style: theme.textTheme.titleMedium),
                 const Spacer(),
@@ -58,6 +63,31 @@ class _ConnectionBarState extends ConsumerState<ConnectionBar> {
               ],
             ),
             const SizedBox(height: 12),
+            if (!serialSupported)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Icon(
+                      Icons.info_outline,
+                      size: 18,
+                      color: theme.colorScheme.tertiary,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'En Android no hay conexión USB al GRBL: aquí puedes '
+                        'preparar y guardar trabajos (CAM, plóter y visor) y '
+                        'enviarlos desde la versión de escritorio.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.tertiary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Wrap(
               spacing: 16,
               runSpacing: 12,
@@ -79,8 +109,12 @@ class _ConnectionBarState extends ConsumerState<ConnectionBar> {
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Actualizar puertos',
-                  onPressed: state.isBusy ? null : controller.refreshPorts,
+                  tooltip: serialSupported
+                      ? 'Actualizar puertos'
+                      : 'Sin puertos serie en esta plataforma',
+                  onPressed: state.isBusy || !serialSupported
+                      ? null
+                      : controller.refreshPorts,
                   icon: const Icon(Icons.refresh),
                 ),
                 _Labeled(
@@ -104,7 +138,7 @@ class _ConnectionBarState extends ConsumerState<ConnectionBar> {
                   ),
                 ),
                 FilledButton.icon(
-                  onPressed: state.isBusy
+                  onPressed: state.isBusy || !serialSupported
                       ? null
                       : (state.isConnected
                             ? controller.disconnect
