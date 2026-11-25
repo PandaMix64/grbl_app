@@ -104,6 +104,11 @@ void main() {
     expect(find.textContaining('arcos'), findsOneWidget);
     expect(find.textContaining('segmentos'), findsOneWidget);
 
+    // Centrar el trazado devuelve la vista a su encuadre sin romper el lienzo.
+    await tester.tap(find.byTooltip('Centrar trazado'));
+    await tester.pump();
+    expect(find.byKey(const Key('viewer-canvas')), findsOneWidget);
+
     // La barra de ejecución aparece y queda bloqueada sin conexión.
     expect(find.text('Ejecución'), findsOneWidget);
     expect(find.textContaining('Conecta la máquina'), findsOneWidget);
