@@ -10,9 +10,9 @@ Flutter + Material Design 3, Clean Architecture con gestión de estado reactiva,
 
 | Fase | Estado |
 | :--- | :--- |
-| Fase 0 — Fundaciones | 🟢 Casi cerrada (M0.1–M0.3 entregados) |
-| Fase 1 — Núcleo y Serial | 🟡 En curso (navegación y capa serial listas; falta la implementación FFI) |
-| Fase 2 — Calibración | ⬜ Pendiente |
+| Fase 0 — Fundaciones | ✅ Cerrada |
+| Fase 1 — Núcleo y Serial | ✅ Cerrada |
+| Fase 2 — Calibración | 🟡 Siguiente |
 | Fase 3 — Visor 3D | ⬜ Pendiente |
 | Fase 4 — Generador CAM | ⬜ Pendiente |
 | Fase 5 — Optimización y empaquetado | ⬜ Pendiente |
@@ -59,18 +59,25 @@ flutter run -d windows
 
 ```text
 lib/
-  app/          # GrblApp y HomeShell (NavigationRail / NavigationBar adaptativo)
+  app/          # GrblApp, HomeShell y providers de Riverpod
   core/grbl/    # constantes de protocolo (bytes en tiempo real, búfer, baudios)
   core/widgets/ # widgets compartidos
   domain/
     entities/   # StatusReport, BuildInfo, ParserState, WorkOffsets, perfiles, proyectos
     repositories/  # contrato SerialPortRepository
     services/   # ProfileConsistency (perfil ↔ EEPROM)
-  data/serial/  # conteo de caracteres, servicio GRBL, FFI y worker isolate
-  features/     # home, calibration, viewer, cam
+  data/
+    serial/     # conteo de caracteres, servicio GRBL, FFI y worker isolate
+    database/   # esquema drift (perfiles, proyectos, recientes) + mappers
+    repositories/  # ProjectRepository: persistir y confirmar antes del reset
+  features/
+    connection/ # controlador y barra de conexión
+    home/ calibration/ viewer/ cam/
 test/
-  domain/       # parseo de telemetría y protocolo, perfiles, proyectos, consistencia
+  domain/       # protocolo, perfiles, proyectos, consistencia
   serial/       # presupuesto de 128 B, seguridad, handshake y worker
+  data/         # base de datos real y persistencia del punto de reanudación
+  features/     # controlador de conexión
   helpers/      # FakeSerialPort: emulador GRBL de pruebas
 ```
 
@@ -94,6 +101,18 @@ await client.pause();
 `connect()` ejecuta el handshake completo: banner, `$I` (de donde sale el **tamaño real** del búfer RX), `$$`, `$G` y `$#`. `stopJob()` emite un `WorkerPersistRequest`: hasta que no se llame `confirmPersisted()` no se envía el soft reset (SEG-03).
 
 > **Nota de entorno:** `flutter_libserialport` despliega la biblioteca nativa mediante CMake en el *bundle* de la aplicación. Por eso `flutter test` no puede cargarla: la prueba de humo FFI se salta y la verificación real se hace con `flutter run -d windows` (ver R-10 en `ESTADO_PROYECTO.md`).
+
+## Persistencia
+
+Los perfiles, proyectos y archivos recientes viven en SQLite (drift). El esquema está en `lib/data/database/app_database.dart` y **el código generado se versiona**, así que un clon nuevo compila sin pasos extra:
+
+```powershell
+# solo si cambias tablas o consultas
+dart run build_runner build --delete-conflicting-outputs
+```
+
+`ProjectRepository.persistAndConfirm()` guarda el punto de reanudación en disco y **solo después** confirma al worker; si la escritura falla, no se envía el soft reset y la máquina queda en `Hold` con la herramienta apagada.
+
 
 
 ## Convenciones

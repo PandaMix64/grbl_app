@@ -9,11 +9,11 @@
 | :--- | :--- |
 | Proyecto | `grbl_app` — entorno CNC con Flutter + GRBL v1.1h |
 | Repositorio | Git local, rama `main` (inicializado 2026-11-24) |
-| Sesión actual | **S-03 (cerrada)** |
-| Fase actual | **Fase 1 — Núcleo y Serial (camino de conexión completo)** |
-| Avance global estimado | ~50 % |
-| Bloqueos | Ninguno. Falta la verificación con hardware real (R-10) |
-| Siguiente hito | **M1.2** — persistencia Drift + cableado del worker en Riverpod y barra de conexión |
+| Sesión actual | **S-04 (cerrada)** |
+| Fase actual | **Fase 1 cerrada · siguiente: Fase 2 (Calibración)** |
+| Avance global estimado | ~60 % |
+| Bloqueos | La prueba en banco queda pospuesta por decisión del usuario hasta completar la UI |
+| Siguiente hito | **M2.1** — jogging (`$J=` + `0x85`) y lectura/escritura de parámetros `$` desde la UI |
 
 ---
 
@@ -31,7 +31,7 @@
 | Fase | Objetivo | Estado | Notas |
 | :--- | :--- | :--- | :--- |
 | **Fase 0: Fundaciones** | Repo, entorno, contratos de dominio, fachada serial, política de seguridad | 🟢 **Cerrada salvo licencia y CHANGELOG** | Añadida por la revisión técnica; M0.1–M0.3 entregados en S-02 |
-| **Fase 1: Núcleo y Serial** | Clean Architecture, esquema SQLite, navegación M3, isolate serial con *character-counting* | 🟡 **En curso (~60 %)** | Conexión, handshake, worker y búfer real listos; faltan Drift y la UI de conexión |
+| **Fase 1: Núcleo y Serial** | Clean Architecture, esquema SQLite, navegación M3, isolate serial con *character-counting* | ✅ **Cerrada** | Conexión, handshake, worker, Drift, providers y barra de conexión entregados |
 | **Fase 2: Calibración** | Jogging, pasos/mm, parámetros `$`, perfiles y *backlash* | ⬜ Pendiente | *Backlash* según P0-2 (sin `G92`) |
 | **Fase 3: Visor 3D** | Renderizado, interpretación de G-code, pausa/detención y reanudación segura | ⬜ Pendiente | `ResumeState` y `MotionSegment` ya existen; falta persistencia y render |
 | **Fase 4: Generador CAM** | Imagen → G-code (vectorización, dithering, relieve 2.5D) | ⬜ Pendiente | Modo láser requiere `$32` (P1-1) |
@@ -78,11 +78,17 @@ Leyenda: 🟡 en curso · ✅ cerrada · ⬜ pendiente · 🔴 bloqueada
 - [x] `stopJob` con confirmación de persistencia a través del canal (SEG-03)
 - [ ] Verificación con hardware real (ver R-10)
 
-### M1.2 Persistencia y UI de conexión
-- [ ] Esquema Drift (`machine_profiles`, `projects`, `recent_files`) con migraciones
-- [ ] Providers de Riverpod para el `GrblWorkerClient` y la telemetría
-- [ ] Barra de conexión: puerto, baudios, estado y avisos de `ProfileConsistency`
-- [ ] Persistencia del punto de reanudación al confirmar `WorkerPersistRequest`
+### M1.2 Persistencia y UI de conexión (cerrada en S-04)
+- [x] Esquema Drift (`machine_profiles`, `projects`, `recent_files`) con migraciones y pruebas con SQLite real
+- [x] Providers de Riverpod para el `GrblWorkerClient` y la telemetría
+- [x] Barra de conexión: puerto, baudios, estado y avisos de `ProfileConsistency`
+- [x] Persistencia del punto de reanudación al confirmar `WorkerPersistRequest` (R-12 cerrado)
+
+### M2.1 Calibración — siguiente
+- [ ] Jogging con `$J=` (F obligatorio) y cancelación con `0x85` al soltar
+- [ ] Lectura/escritura de parámetros `$` con `GrblSettings.diff` (sin desgastar EEPROM)
+- [ ] Calibración de pasos/mm guiada (avance teórico vs. medido)
+- [ ] CRUD de perfiles de máquina sobre Drift
 
 ---
 
@@ -207,6 +213,35 @@ Recuperación de la sesión: `git log --oneline --grep="S-03"`.
 
 ---
 
+### S-04 — 2026-11-24 · Persistencia, providers y barra de conexión (M1.2 · Fase 1 cerrada)
+
+**Alcance:** cerrar M1.2: esquema Drift con pruebas reales, providers de Riverpod, barra de conexión en Inicio y persistencia del punto de reanudación antes del soft reset.
+
+**Entregado**
+
+| # | Cambio | Archivo(s) | Estado |
+| :--- | :--- | :--- | :--- |
+| 1 | Esquema Drift: `machine_profiles`, `projects`, `recent_files` + mappers y DAOs | `lib/data/database/app_database.dart` (+ `.g.dart`) | ✅ |
+| 2 | 8 pruebas contra SQLite real (`NativeDatabase.memory()`) | `test/data/app_database_test.dart` | ✅ |
+| 3 | `ProjectRepository.persistAndConfirm`: escribe y **solo después** confirma al worker (R-12) | `lib/data/repositories/project_repository.dart` | ✅ |
+| 4 | `persistRequest` enriquecido con `$G` y timeout configurable | `lib/data/serial/grbl_worker*.dart` | ✅ |
+| 5 | Providers: `databaseProvider` y `grblWorkerProvider` (sobrescribibles en pruebas) | `lib/app/providers.dart` | ✅ |
+| 6 | `ConnectionController` con estado tipado y telemetría acoplada | `lib/features/connection/connection_controller.dart` | ✅ |
+| 7 | Barra de conexión (puerto, baudios, chip de estado, firmware, búfer y avisos) | `lib/features/connection/widgets/connection_bar.dart`, `lib/features/home/home_page.dart` | ✅ |
+| 8 | 16 pruebas nuevas (98 en total, 1 saltada) | `test/data/`, `test/features/`, `test/widget_test.dart` | ✅ |
+
+**Verificaciones ejecutadas:** `flutter analyze` → *No issues found* · `flutter test` → **98 en verde, 1 saltada** · `dart format` → 0 cambios · `build_runner` → código generado sin conflictos.
+
+**Hallazgo de entorno:** a diferencia de `libserialport`, **SQLite sí funciona en `flutter test`** porque `sqlite3` 3.x usa *native assets* (`hook/build.dart`). Por eso la persistencia se prueba de verdad y no con un doble.
+
+**Bug de diseño corregido:** `spindleOn` se derivaba del status report posterior a la pausa, que ya tiene `S:0` porque `pauseSafely` apagó la herramienta. Ahora se deriva del estado modal `$G`, que es la fuente autoritativa de `M3`/`M4`/`M5` y de `F`/`S`.
+
+**Decisiones tomadas:** ADR-015, ADR-016.
+
+**Abierto al cierre:** prueba en banco (R-10, pospuesta por decisión del usuario hasta completar la UI) y toda la Fase 2.
+
+---
+
 ## 5. Decisiones de arquitectura (ADR resumidas)
 
 | ID | Decisión | Motivo | Consecuencia |
@@ -225,6 +260,8 @@ Recuperación de la sesión: `git log --oneline --grep="S-03"`.
 | ADR-012 | El comando `stop` exige confirmación de persistencia desde el cliente | SEG-03 no se puede garantizar si el worker resetea por su cuenta | El worker emite `persistRequest` y espera `persistDone` (20 s); sin ack no hay `0x18` |
 | ADR-013 | El tamaño de búfer se detecta con `$I` y se aplica antes de leer la EEPROM | P1-4: no asumir 128 B; `[OPT:...,bloques,bytes]` es la fuente oficial | Si `$I` no responde se conserva 128 B y se avisa por el canal de mensajes |
 | ADR-014 | Las pruebas que requieren la biblioteca nativa se saltan fuera de un build de la app | CMake despliega `serialport.dll` solo en el bundle | La verificación FFI se hace con `flutter run -d windows` + hardware (R-10) |
+| ADR-015 | El código generado por drift (`app_database.g.dart`) se versiona | CI y clones nuevos compilan sin ejecutar `build_runner` | Si se cambia el esquema hay que regenerar y commitear en el mismo cambio |
+| ADR-016 | Providers escritos a mano (`Provider`/`NotifierProvider`), sin `@riverpod` todavía | La superficie de estado es pequeña y se lee mejor explícita; `riverpod_generator` queda disponible para features grandes | Si el número de providers crece, migrar a codegen en un cambio dedicado |
 
 ---
 
@@ -252,22 +289,23 @@ Recuperación de la sesión: `git log --oneline --grep="S-03"`.
 | R-07 | `LibSerialPortRepository` sin implementar: la app aún no habla con hardware | Fase 1 detenida hasta implementarlo | Implementado en S-03 (FFI + worker con handshake); queda la prueba en banco (R-10) | 🟢 Cerrado |
 | R-08 | CI escrito pero nunca ejecutado en GitHub | Errores de entorno no detectados | Primer push y revisión del run | 🟡 Abierto |
 | R-09 | `GrblSerialService` mezcla transporte y política de seguridad | Mantenibilidad | Extraer `SafetyController` antes de la UI de calibración | 🟡 Vigilado |
-| R-10 | El camino FFI (DLL + handshake) no se ha ejecutado contra hardware ni en un build de escritorio | Fallos de plataforma no detectados hasta la primera prueba real | `flutter run -d windows` con Arduino en banco antes de empezar la UI | 🔴 Abierto |
+| R-10 | El camino FFI (DLL + handshake) no se ha ejecutado contra hardware ni en un build de escritorio | Fallos de plataforma no detectados hasta la primera prueba real | Pospuesto por decisión del usuario: se hará con la UI completa | 🟡 Pospuesto |
 | R-11 | Sin reconexión automática tras una pérdida de USB | Trabajo interrumpido y estado perdido | Detectar error de puerto, marcar `Disconnected` y exigir reconexión con handshake | 🟡 Vigilado |
-| R-12 | La persistencia (Drift) aún no existe: `persistProgress` solo puede confirmar de memoria | El ack de SEG-03 no garantiza durabilidad todavía | Implementar el esquema Drift en M1.2 antes de usar `stop` en producción | 🔴 Abierto |
+| R-12 | La persistencia (Drift) aún no existe: `persistProgress` solo puede confirmar de memoria | El ack de SEG-03 no garantiza durabilidad todavía | Cerrado en S-04: `ProjectRepository.persistAndConfirm` escribe en SQLite antes de confirmar | ✅ Cerrado |
+| R-13 | La conexión desde la UI se cubre en tests de controlador, no con un widget test que pulse «Conectar» | Un fallo de cableado UI ↔ controlador no se detectaría en CI | Prueba E2E en build con hardware (R-10) y revisión manual al integrar la Fase 2 | 🟡 Vigilado |
 
 ---
 
 ## 8. Próximos pasos (orden estricto)
 
-1. **M1.2 — Drift**: tablas `machine_profiles`, `projects`, `recent_files`, migraciones y pruebas con `NativeDatabase.memory()`.
-2. Providers de Riverpod: `grblWorkerProvider` (spawn/dispose), telemetría con `select()` por magnitud y canal de mensajes.
-3. Barra de conexión en la pantalla de Inicio: `listPorts`, baudios, handshake y avisos de `ProfileConsistency` (bloqueos en rojo).
-4. Persistencia real del punto de reanudación al recibir `WorkerPersistRequest` (cierra R-12).
-5. Verificación en banco (R-10): `flutter run -d windows` + Arduino con GRBL; comprobar enumeración, handshake, búfer detectado, pausa con herramienta apagada y `$X` tras detener.
-6. Extraer `SafetyController` sobre `GrblWorkerClient` para que la UI no llame métodos peligrosos directamente.
-7. `CHANGELOG.md`, licencia y `NOTICE` con la atribución GPLv3 de GRBL.
-8. Push al remoto para que el CI corra de verdad (R-08).
+1. **M2.1 — Jogging**: comandos `$J=` con `F` obligatorio y cancelación `0x85` al soltar, con validación de estado `Idle`/`Jog` y bloqueo si el perfil no está cargado.
+2. Lectura/escritura de parámetros `$` desde la UI usando `GrblSettings.diff` (solo lo que cambia) y confirmación explícita antes de escribir EEPROM.
+3. CRUD de perfiles sobre Drift (`allProfiles`, `upsertProfile`, `deleteProfile`) con validación de `MachineProfile.validate()`.
+4. Calibración de pasos/mm guiada: avance teórico, captura de la medida real y recálculo con la fórmula de §3.2 del documento.
+5. Prueba de humo en build de escritorio cuando la UI esté completa (R-10): enumerar, conectar, handshake, pausa con herramienta apagada.
+6. `CHANGELOG.md`, licencia y `NOTICE` con la atribución GPLv3 de GRBL.
+7. Push al remoto para ejecutar el CI (R-08).
+
 
 
 

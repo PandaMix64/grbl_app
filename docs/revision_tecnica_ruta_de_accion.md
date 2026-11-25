@@ -171,7 +171,7 @@ El contenedor portable necesita `schemaVersion`, migración explícita y validac
 
 - `package:flutter/material.dart` **está deprecado**; el import correcto es `package:material_ui/material_ui.dart` (`material_ui ^1.11.1`). Los widgets y el tema siguen siendo Material 3, e incluso `GlobalMaterialLocalizations` se importa desde ese paquete (importarlo además desde `flutter_localizations` provoca `ambiguous_import`).
 - `flutter pub get` migra `analysis_options.yaml` por sí solo para excluir `build/` y los directorios de plataforma.
-- `sqlite3_flutter_libs` quedó obsoleto: en Flutter 3.50 la base SQLite viene de `sqlite3` 3.x, ya resuelta por `drift_flutter`.
+- `sqlite3_flutter_libs` quedó obsoleto: en Flutter 3.50 la base SQLite viene de `sqlite3` 3.x, ya resuelta por `drift_flutter`. **Verificado en S-04**: `sqlite3` 3.x trae `hook/build.dart` (*native assets*), así que SQLite **sí** está disponible en `flutter test` — al contrario que la DLL de `libserialport`, que solo existe en el bundle de la app.
 - Los proyectos nuevos deben declarar `environment: sdk: ^3.14.0` para no prometer compatibilidad que el toolchain no ofrece.
 
 La versión de `flutter_libserialport` (0.6.0) fue publicada hace más de un año: conviene verificar al momento de implementar que `libserialport.dll` se empaqueta correctamente en el build de Windows y que el permiso USB de Android (`android.hardware.usb.host` + intent de dispositivo) está declarado en el manifest.
