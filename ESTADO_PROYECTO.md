@@ -3,7 +3,7 @@
 > **Propósito:** este archivo es el punto de retorno. Cualquier agente o persona que retome el
 > trabajo debe leerlo primero: dice en qué fase estamos, qué se hizo, qué falta y por qué se
 > tomaron las decisiones que están en vigor.
-> **Protocolo:** se actualiza al final de cada sesión (§5 bitácora, §3 tablero, §2 fases).
+> **Protocolo:** se actualiza al final de cada sesión (§4 bitácora, §3 tablero, §2 fases).
 
 | Campo | Valor |
 | :--- | :--- |
@@ -21,8 +21,8 @@
 
 1. Leer este archivo completo y `docs/revision_tecnica_ruta_de_accion.md` (§3, hallazgos P0).
 2. Ejecutar `flutter analyze` y `flutter test` para confirmar que la línea base está sana.
-3. Revisar §7 (próximos pasos): la primera tarea pendiente es la de arriba.
-4. Al terminar, actualizar §3, §5 y §2 y hacer commit con la etiqueta `[S-xx]`.
+3. Revisar §8 (próximos pasos): la primera tarea pendiente es la de arriba.
+4. Al terminar, actualizar §3, §4 y §2 y hacer commit con la etiqueta `[S-xx]`.
 
 ---
 
