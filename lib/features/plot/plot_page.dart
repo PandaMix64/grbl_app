@@ -26,6 +26,7 @@ class _PlotPageState extends ConsumerState<PlotPage> {
   final TextEditingController _drawFeed = TextEditingController(text: '1500');
   final TextEditingController _travelFeed = TextEditingController(text: '4000');
   final TextEditingController _simplify = TextEditingController(text: '0.15');
+  final TextEditingController _smooth = TextEditingController(text: '0.4');
   final TextEditingController _spacing = TextEditingController(text: '1.5');
   final TextEditingController _angle = TextEditingController(text: '45');
   final TextEditingController _stitch = TextEditingController(text: '0');
@@ -46,6 +47,7 @@ class _PlotPageState extends ConsumerState<PlotPage> {
     _drawFeed.dispose();
     _travelFeed.dispose();
     _simplify.dispose();
+    _smooth.dispose();
     _spacing.dispose();
     _angle.dispose();
     _stitch.dispose();
@@ -82,6 +84,7 @@ class _PlotPageState extends ConsumerState<PlotPage> {
     drawFeedMmMin: _parse(_drawFeed, 1500),
     travelFeedMmMin: _parse(_travelFeed, 4000),
     simplifyMm: _parseSigned(_simplify, 0.15),
+    smoothMm: _parseSigned(_smooth, 0.4),
     optimizeOrder: _optimize,
     hatchSpacingMm: _parse(_spacing, 1.5),
     hatchAngleDeg: _parseSigned(_angle, 45),
@@ -289,6 +292,12 @@ class _PlotPageState extends ConsumerState<PlotPage> {
                   label: 'Simplificar (mm)',
                   controller: _simplify,
                   width: 140,
+                  onChanged: () => setState(() {}),
+                ),
+                _Field(
+                  label: 'Suavizar (mm)',
+                  controller: _smooth,
+                  width: 130,
                   onChanged: () => setState(() {}),
                 ),
                 Row(

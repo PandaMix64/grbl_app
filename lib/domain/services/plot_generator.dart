@@ -50,6 +50,7 @@ class PlotSettings {
     this.drawFeedMmMin = 1500,
     this.travelFeedMmMin = 4000,
     this.simplifyMm = 0.15,
+    this.smoothMm = 0.4,
     this.optimizeOrder = true,
     this.hatchSpacingMm = 1.5,
     this.hatchAngleDeg = 45,
@@ -75,6 +76,13 @@ class PlotSettings {
   final double drawFeedMmMin;
   final double travelFeedMmMin;
   final double simplifyMm;
+
+  /// Radio de suavizado en mm (0 = sin suavizar).
+  ///
+  /// Convierte la escalera de píxeles de las diagonales y curvas en una polilínea
+  /// continua, conservando las esquinas marcadas.
+  final double smoothMm;
+
   final bool optimizeOrder;
 
   /// Separación entre líneas del bordado y su ángulo.
@@ -112,6 +120,9 @@ class PlotSettings {
     }
     if (simplifyMm < 0 || simplifyMm > 5) {
       errors.add('La tolerancia de simplificación debe estar entre 0 y 5 mm.');
+    }
+    if (smoothMm < 0 || smoothMm > 5) {
+      errors.add('El suavizado debe estar entre 0 y 5 mm.');
     }
     if (hatchSpacingMm < 0.2 || hatchSpacingMm > 20) {
       errors.add('La separación del bordado debe estar entre 0.2 y 20 mm.');
@@ -398,9 +409,18 @@ class PlotGenerator {
     PlotSettings settings,
   ) {
     final double epsilonPx = settings.simplifyMm / settings.pixelMm;
+    final int window = (settings.smoothMm / settings.pixelMm).round().clamp(
+      0,
+      10,
+    );
     final List<List<Vector2>> loops = <List<Vector2>>[];
     for (final List<Vector2> loop in _tracer.trace(inside)) {
-      final List<Vector2> reduced = _tracer.simplify(loop, epsilonPx);
+      List<Vector2> reduced = _tracer.simplify(loop, epsilonPx);
+      if (window > 0 && reduced.length >= 5) {
+        // Suaviza la escalera de píxeles y vuelve a simplificar: menos vértices
+        // por curva, sin los dientes de sierra de las diagonales.
+        reduced = _tracer.simplify(_smooth(reduced, window), epsilonPx * 0.5);
+      }
       if (reduced.length >= 3) {
         // Cerrado: se repite el primer punto al final.
         loops.add(<Vector2>[...reduced, reduced.first]);
@@ -412,7 +432,37 @@ class PlotGenerator {
     return _orderByProximity(loops);
   }
 
-  /// Vecino más cercano desde el origen, pudiendo invertir cada trayecto.
+  /// Suaviza el trayecto promediando vecinos y conservando las esquinas.
+  ///
+  /// Un vértice se considera esquina si se separa del punto medio de sus vecinos
+  /// más de `1,5 × ventana` píxeles: los escalones de una diagonal son pequeños y
+  /// se suavizan; la punta de un corazón se conserva.
+  List<Vector2> _smooth(List<Vector2> loop, int window) {
+    final int count = loop.length;
+    if (window < 1 || count < 5) {
+      return loop;
+    }
+    final double cornerPx = window * 1.5;
+    final double divisor = (2 * window + 1).toDouble();
+    final List<Vector2> out = <Vector2>[];
+    for (int i = 0; i < count; i++) {
+      final Vector2 current = loop[i];
+      final Vector2 before = loop[(i - window + count) % count];
+      final Vector2 after = loop[(i + window) % count];
+      final Vector2 chord = (before + after) * 0.5;
+      if ((current - chord).length > cornerPx) {
+        out.add(current);
+        continue;
+      }
+      Vector2 sum = Vector2.zero();
+      for (int offset = -window; offset <= window; offset++) {
+        sum += loop[(i + offset + count) % count];
+      }
+      out.add(sum / divisor);
+    }
+    return out;
+  }
+
   List<List<Vector2>> _orderByProximity(List<List<Vector2>> loops) {
     final List<List<Vector2>> remaining = List<List<Vector2>>.of(loops);
     final List<List<Vector2>> ordered = <List<Vector2>>[];

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -35,6 +36,28 @@ List<List<double>> _drawMoves(String gcode) {
       if (pattern.firstMatch(line) case final RegExpMatch match)
         <double>[double.parse(match.group(1)!), double.parse(match.group(2)!)],
   ];
+}
+
+/// Suma de los giros entre segmentos consecutivos (radianes).
+double _turnSum(String gcode) {
+  final List<List<double>> points = _drawMoves(gcode);
+  double total = 0;
+  for (int i = 2; i < points.length; i++) {
+    final double a1 = math.atan2(
+      points[i - 1][1] - points[i - 2][1],
+      points[i - 1][0] - points[i - 2][0],
+    );
+    final double a2 = math.atan2(
+      points[i][1] - points[i - 1][1],
+      points[i][0] - points[i - 1][0],
+    );
+    double delta = (a2 - a1).abs();
+    if (delta > math.pi) {
+      delta = 2 * math.pi - delta;
+    }
+    total += delta;
+  }
+  return total;
 }
 
 void main() {
@@ -225,6 +248,45 @@ void main() {
       ),
       throwsA(isA<PlotException>()),
     );
+  });
+
+  test('el suavizado elimina el zigzag de las diagonales', () {
+    // Rombo: sus cuatro lados son diagonales de píxeles (escalera pura).
+    final img.Image diamond = _canvas(60);
+    for (int y = 0; y < 60; y++) {
+      for (int x = 0; x < 60; x++) {
+        if ((x - 30).abs() + (y - 30).abs() <= 20) {
+          diamond.setPixelRgb(x, y, 0, 0, 0);
+        }
+      }
+    }
+
+    final PlotResult sharp = generator.generate(
+      _job(
+        diamond,
+        settings: const PlotSettings(
+          widthMm: 60,
+          pixelMm: 1,
+          simplifyMm: 0,
+          smoothMm: 0,
+        ),
+      ),
+    );
+    final PlotResult smooth = generator.generate(
+      _job(
+        diamond,
+        settings: const PlotSettings(
+          widthMm: 60,
+          pixelMm: 1,
+          simplifyMm: 0,
+          smoothMm: 2,
+        ),
+      ),
+    );
+
+    expect(smooth.paths, 1);
+    // El suavizado reduce drásticamente los cambios de dirección.
+    expect(_turnSum(smooth.gcode), lessThan(_turnSum(sharp.gcode) * 0.7));
   });
 
   test('la vista previa es un PNG del tamaño de la rejilla', () {
