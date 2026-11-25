@@ -7,6 +7,7 @@ import 'package:grbl_app/app/providers.dart';
 import 'package:grbl_app/data/database/app_database.dart';
 import 'package:grbl_app/data/serial/grbl_worker_client.dart';
 import 'package:grbl_app/domain/entities/machine_profile.dart';
+import 'package:grbl_app/domain/services/contour_generator.dart';
 import 'package:grbl_app/domain/services/engraving_generator.dart';
 import 'package:grbl_app/features/cam/cam_controller.dart';
 import 'package:grbl_app/features/viewer/viewer_controller.dart';
@@ -76,8 +77,8 @@ void main() {
     );
 
     expect(state().error, isNull);
-    expect(state().result, isNotNull);
-    expect(state().result!.litCells, 100);
+    expect(state().engraveResult, isNotNull);
+    expect(state().engraveResult!.litCells, 100);
     expect(state().message, contains('G-code generado'));
 
     controller().sendToViewer();
@@ -110,7 +111,7 @@ void main() {
       const EngravingSettings(widthMm: 400, pixelMm: 1),
     );
 
-    expect(state().result, isNull);
+    expect(state().engraveResult, isNull);
     expect(state().error, contains('excede'));
   });
 
@@ -120,5 +121,56 @@ void main() {
     await controller().generate(const EngravingSettings());
 
     expect(state().error, contains('imagen'));
+  });
+
+  test('genera un contorno y lo envía al visor', () async {
+    await useProfile(laserProfile);
+    controller().loadImage(_blackImage(), 'logo.png');
+    controller().setOperation(CamOperation.contour);
+
+    await controller().generateContour(
+      const ContourSettings(widthMm: 10, pixelMm: 1, power: 800),
+    );
+
+    expect(state().error, isNull, reason: state().error);
+    expect(state().contourResult, isNotNull);
+    expect(state().contourResult!.loops, greaterThanOrEqualTo(1));
+    expect(state().message, contains('Contorno generado'));
+    expect(state().previewPng, isNotNull);
+
+    controller().sendToViewer();
+
+    final ViewerUiState viewer = container.read(viewerControllerProvider);
+    expect(viewer.fileName, 'logo_contorno.gcode');
+    expect(viewer.source, contains('G90'));
+    expect(viewer.hasProgram, isTrue);
+  });
+
+  test('el contorno con láser exige perfil láser', () async {
+    await useProfile(
+      laserProfile.copyWith(tool: ToolType.mill, name: 'Fresadora'),
+    );
+    controller().loadImage(_blackImage(), 'logo.png');
+    controller().setOperation(CamOperation.contour);
+
+    await controller().generateContour(const ContourSettings());
+
+    expect(state().contourResult, isNull);
+    expect(state().error, contains('láser'));
+  });
+
+  test('cambiar de operación descarta el resultado anterior', () async {
+    await useProfile(laserProfile);
+    controller().loadImage(_blackImage(), 'logo.png');
+    await controller().generate(
+      const EngravingSettings(widthMm: 10, pixelMm: 1),
+    );
+    expect(state().engraveResult, isNotNull);
+
+    controller().setOperation(CamOperation.contour);
+
+    expect(state().engraveResult, isNull);
+    expect(state().contourResult, isNull);
+    expect(state().hasResult, isFalse);
   });
 }

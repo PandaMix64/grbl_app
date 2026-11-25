@@ -89,8 +89,10 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('CAM · Grabado láser'), findsOneWidget);
+    expect(find.text('CAM · Imagen → G-code'), findsOneWidget);
     expect(find.text('Elegir imagen'), findsOneWidget);
+    expect(find.text('Grabado'), findsOneWidget);
+    expect(find.text('Contorno'), findsOneWidget);
     expect(find.text('Parámetros de grabado'), findsOneWidget);
     expect(find.textContaining('Generar'), findsWidgets);
   });

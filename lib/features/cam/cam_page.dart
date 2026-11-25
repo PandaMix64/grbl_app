@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,14 +7,16 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../app/providers.dart';
 import '../../domain/entities/machine_profile.dart';
+import '../../domain/services/contour_generator.dart';
 import '../../domain/services/engraving_generator.dart';
 import 'cam_controller.dart';
 
-/// Vista previa del grabado: una celda por píxel, tal y como quedará el material.
-class _EngravingPreview extends StatelessWidget {
-  const _EngravingPreview({required this.result});
+/// Vista previa del trabajo: el resultado sobre el material.
+class _PathPreview extends StatelessWidget {
+  const _PathPreview({required this.png, required this.caption});
 
-  final EngravingResult result;
+  final Uint8List png;
+  final String caption;
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +30,7 @@ class _EngravingPreview extends StatelessWidget {
             height: 300,
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              // Fondo claro: el grabado se ve como sobre la pieza.
+              // Fondo claro: el trabajo se ve como sobre la pieza.
               color: const Color(0xFFF5F2EA),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
@@ -35,22 +38,16 @@ class _EngravingPreview extends StatelessWidget {
               ),
             ),
             child: Image.memory(
-              result.previewPng,
+              png,
               fit: BoxFit.contain,
               filterQuality: FilterQuality.none,
               gaplessPlayback: true,
-              semanticLabel: 'Vista previa del grabado',
+              semanticLabel: 'Vista previa del trabajo',
             ),
           ),
         ),
         const SizedBox(height: 6),
-        Center(
-          child: Text(
-            'Vista previa del resultado: 1 celda = 1 píxel · '
-            '${result.columns} × ${result.rows}',
-            style: theme.textTheme.labelSmall,
-          ),
-        ),
+        Center(child: Text(caption, style: theme.textTheme.labelSmall)),
       ],
     );
   }
@@ -171,8 +168,15 @@ class _CamPageState extends ConsumerState<CamPage> {
   final TextEditingController _pixel = TextEditingController(text: '0.5');
   final TextEditingController _power = TextEditingController(text: '1000');
   final TextEditingController _feed = TextEditingController(text: '1200');
+  final TextEditingController _cutZ = TextEditingController(text: '-1');
+  final TextEditingController _passDepth = TextEditingController(text: '0.5');
+  final TextEditingController _safeZ = TextEditingController(text: '2');
+  final TextEditingController _tabs = TextEditingController(text: '0');
+  final TextEditingController _tabWidth = TextEditingController(text: '3');
+  final TextEditingController _tabHeight = TextEditingController(text: '0.8');
 
   EngravingMode _mode = EngravingMode.threshold;
+  ContourTool _contourTool = ContourTool.laser;
   double _threshold = 0.5;
   bool _invert = false;
 
@@ -182,6 +186,12 @@ class _CamPageState extends ConsumerState<CamPage> {
     _pixel.dispose();
     _power.dispose();
     _feed.dispose();
+    _cutZ.dispose();
+    _passDepth.dispose();
+    _safeZ.dispose();
+    _tabs.dispose();
+    _tabWidth.dispose();
+    _tabHeight.dispose();
     super.dispose();
   }
 
@@ -190,6 +200,202 @@ class _CamPageState extends ConsumerState<CamPage> {
       controller.text.trim().replaceAll(',', '.'),
     );
     return value == null || value <= 0 ? fallback : value;
+  }
+
+  /// Igual que [_parse] pero admite negativos (profundidad de corte).
+  static double _parseSigned(
+    TextEditingController controller,
+    double fallback,
+  ) {
+    final double? value = double.tryParse(
+      controller.text.trim().replaceAll(',', '.'),
+    );
+    return value ?? fallback;
+  }
+
+  static int _parseCount(TextEditingController controller) {
+    final int? value = int.tryParse(controller.text.trim());
+    return value == null || value < 0 ? 0 : value;
+  }
+
+  Widget _contourPanel(ThemeData theme) {
+    return _Panel(
+      icon: Icons.content_cut,
+      title: 'Parámetros de corte',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Wrap(
+            spacing: 16,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.end,
+            children: <Widget>[
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text('Herramienta', style: theme.textTheme.labelSmall),
+                  DropdownButton<ContourTool>(
+                    value: _contourTool,
+                    items: <DropdownMenuItem<ContourTool>>[
+                      for (final ContourTool tool in ContourTool.values)
+                        DropdownMenuItem<ContourTool>(
+                          value: tool,
+                          child: Text(tool.label),
+                        ),
+                    ],
+                    onChanged: (ContourTool? tool) {
+                      if (tool != null) {
+                        setState(() => _contourTool = tool);
+                      }
+                    },
+                  ),
+                ],
+              ),
+              _Field(
+                label: 'Ancho (mm)',
+                controller: _width,
+                width: 120,
+                onChanged: () => setState(() {}),
+              ),
+              _Field(
+                label: 'mm por celda',
+                controller: _pixel,
+                width: 120,
+                onChanged: () => setState(() {}),
+              ),
+              _Field(
+                label: 'Potencia / RPM',
+                controller: _power,
+                width: 130,
+                onChanged: () => setState(() {}),
+              ),
+              _Field(
+                label: 'Avance (mm/min)',
+                controller: _feed,
+                width: 140,
+                onChanged: () => setState(() {}),
+              ),
+              _Field(
+                label: 'Profundidad Z',
+                controller: _cutZ,
+                width: 130,
+                onChanged: () => setState(() {}),
+              ),
+              _Field(
+                label: 'Paso por pasada',
+                controller: _passDepth,
+                width: 130,
+                onChanged: () => setState(() {}),
+              ),
+              _Field(
+                label: 'Z segura',
+                controller: _safeZ,
+                width: 110,
+                onChanged: () => setState(() {}),
+              ),
+              _Field(
+                label: 'Pestañas',
+                controller: _tabs,
+                width: 90,
+                onChanged: () => setState(() {}),
+              ),
+              _Field(
+                label: 'Ancho pestaña',
+                controller: _tabWidth,
+                width: 130,
+                onChanged: () => setState(() {}),
+              ),
+              _Field(
+                label: 'Alto pestaña',
+                controller: _tabHeight,
+                width: 120,
+                onChanged: () => setState(() {}),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Umbral: ${(_threshold * 100).toStringAsFixed(0)} % '
+            '(compartido con el grabado)',
+            style: theme.textTheme.labelSmall,
+          ),
+          SizedBox(
+            width: 360,
+            child: Slider(
+              value: _threshold,
+              divisions: 20,
+              label: '${(_threshold * 100).toStringAsFixed(0)} %',
+              onChanged: (double value) => setState(() => _threshold = value),
+            ),
+          ),
+          Text(
+            'La profundidad y las pasadas solo afectan al husillo; en láser las '
+            'pestañas apagan el haz (tolerancia de simplificación 0.2 mm).',
+            style: theme.textTheme.labelSmall,
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _resultSummary(CamUiState state, ThemeData theme) {
+    final EngravingResult? engrave = state.engraveResult;
+    if (engrave != null) {
+      return <Widget>[
+        Text(
+          'Tamaño: ${engrave.widthMm.toStringAsFixed(1)} × '
+          '${engrave.heightMm.toStringAsFixed(1)} mm · '
+          '${engrave.columns}×${engrave.rows} celdas',
+          style: theme.textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${engrave.lineCount} líneas · '
+          '${(engrave.litRatio * 100).toStringAsFixed(0)} % grabado · '
+          '${engrave.mode.label} · S máx. ${engrave.maxPower}',
+          style: theme.textTheme.bodySmall,
+        ),
+      ];
+    }
+    final ContourResult? contour = state.contourResult;
+    if (contour != null) {
+      return <Widget>[
+        Text(
+          'Tamaño: ${contour.widthMm.toStringAsFixed(1)} × '
+          '${contour.heightMm.toStringAsFixed(1)} mm · '
+          '${contour.loops} vueltas · ${contour.points} puntos',
+          style: theme.textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '${contour.lineCount} líneas · ${contour.passes} pasadas · '
+          '${contour.tabs} pestañas · ${contour.tool.label}',
+          style: theme.textTheme.bodySmall,
+        ),
+      ];
+    }
+    return const <Widget>[];
+  }
+
+  ContourSettings get _contourSettings {
+    final double cutZ = _parseSigned(_cutZ, -1);
+    return ContourSettings(
+      widthMm: _parse(_width, 80),
+      pixelMm: _parse(_pixel, 0.5),
+      threshold: _threshold,
+      invert: _invert,
+      tool: _contourTool,
+      power: _parse(_power, 1000).round(),
+      feedMmMin: _parse(_feed, 600),
+      plungeMmMin: 200,
+      safeZmm: _parseSigned(_safeZ, 2),
+      cutZmm: cutZ < 0 ? cutZ : -1,
+      passDepthMm: _parse(_passDepth, 0.5),
+      tabs: _parseCount(_tabs),
+      tabWidthMm: _parse(_tabWidth, 3),
+      tabHeightMm: _parseSigned(_tabHeight, 0.8),
+    );
   }
 
   EngravingSettings get _settings => EngravingSettings(
@@ -243,7 +449,7 @@ class _CamPageState extends ConsumerState<CamPage> {
               children: <Widget>[
                 Expanded(
                   child: Text(
-                    'CAM · Grabado láser',
+                    'CAM · Imagen → G-code',
                     style: theme.textTheme.headlineMedium,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -265,10 +471,26 @@ class _CamPageState extends ConsumerState<CamPage> {
             ),
             const SizedBox(height: 4),
             Text(
-              'La imagen se convierte en potencia del láser (M4). El alto se '
-              'calcula por proporción y el resultado se revisa en el visor '
-              'antes de ejecutar.',
+              state.operation == CamOperation.engrave
+                  ? 'Grabado: la imagen se convierte en potencia del láser '
+                        '(M4), con umbral, tramado o escala de grises.'
+                  : 'Contorno: se vectoriza la silueta y se corta con pasadas '
+                        'en Z y pestañas de sujeción.',
               style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 8),
+            SegmentedButton<CamOperation>(
+              segments: <ButtonSegment<CamOperation>>[
+                for (final CamOperation operation in CamOperation.values)
+                  ButtonSegment<CamOperation>(
+                    value: operation,
+                    label: Text(operation.label),
+                  ),
+              ],
+              selected: <CamOperation>{state.operation},
+              onSelectionChanged: (Set<CamOperation> selection) => ref
+                  .read(camControllerProvider.notifier)
+                  .setOperation(selection.first),
             ),
             const SizedBox(height: 16),
             if (state.error != null)
@@ -283,7 +505,9 @@ class _CamPageState extends ConsumerState<CamPage> {
                 icon: Icons.info_outline,
                 color: theme.colorScheme.primary,
               ),
-            if (profile != null && !profile.usesLaserMode)
+            if (profile != null &&
+                !profile.usesLaserMode &&
+                state.operation == CamOperation.engrave)
               _Notice(
                 text:
                     'El perfil activo no es láser: el grabado por potencia '
@@ -316,97 +540,102 @@ class _CamPageState extends ConsumerState<CamPage> {
               ),
             ),
             const SizedBox(height: 16),
-            _Panel(
-              icon: Icons.tune,
-              title: 'Parámetros de grabado',
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Wrap(
-                    spacing: 16,
-                    runSpacing: 12,
-                    crossAxisAlignment: WrapCrossAlignment.end,
-                    children: <Widget>[
-                      _Field(
-                        label: 'Ancho (mm)',
-                        controller: _width,
-                        width: 120,
-                        onChanged: () => setState(() {}),
+            if (state.operation == CamOperation.engrave)
+              _Panel(
+                icon: Icons.tune,
+                title: 'Parámetros de grabado',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Wrap(
+                      spacing: 16,
+                      runSpacing: 12,
+                      crossAxisAlignment: WrapCrossAlignment.end,
+                      children: <Widget>[
+                        _Field(
+                          label: 'Ancho (mm)',
+                          controller: _width,
+                          width: 120,
+                          onChanged: () => setState(() {}),
+                        ),
+                        _Field(
+                          label: 'mm por celda',
+                          controller: _pixel,
+                          width: 120,
+                          onChanged: () => setState(() {}),
+                        ),
+                        _Field(
+                          label: 'Potencia S máx.',
+                          controller: _power,
+                          width: 130,
+                          onChanged: () => setState(() {}),
+                        ),
+                        _Field(
+                          label: 'Avance (mm/min)',
+                          controller: _feed,
+                          width: 140,
+                          onChanged: () => setState(() {}),
+                        ),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            Text('Modo', style: theme.textTheme.labelSmall),
+                            DropdownButton<EngravingMode>(
+                              value: _mode,
+                              items: <DropdownMenuItem<EngravingMode>>[
+                                for (final EngravingMode mode
+                                    in EngravingMode.values)
+                                  DropdownMenuItem<EngravingMode>(
+                                    value: mode,
+                                    child: Text(mode.label),
+                                  ),
+                              ],
+                              onChanged: (EngravingMode? mode) {
+                                if (mode != null) {
+                                  setState(() => _mode = mode);
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            Text(
+                              'Invertir',
+                              style: theme.textTheme.labelMedium,
+                            ),
+                            Switch(
+                              value: _invert,
+                              onChanged: (bool value) =>
+                                  setState(() => _invert = value),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    if (_mode == EngravingMode.threshold) ...<Widget>[
+                      const SizedBox(height: 12),
+                      Text(
+                        'Umbral: ${(_threshold * 100).toStringAsFixed(0)} %',
+                        style: theme.textTheme.labelSmall,
                       ),
-                      _Field(
-                        label: 'mm por celda',
-                        controller: _pixel,
-                        width: 120,
-                        onChanged: () => setState(() {}),
-                      ),
-                      _Field(
-                        label: 'Potencia S máx.',
-                        controller: _power,
-                        width: 130,
-                        onChanged: () => setState(() {}),
-                      ),
-                      _Field(
-                        label: 'Avance (mm/min)',
-                        controller: _feed,
-                        width: 140,
-                        onChanged: () => setState(() {}),
-                      ),
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text('Modo', style: theme.textTheme.labelSmall),
-                          DropdownButton<EngravingMode>(
-                            value: _mode,
-                            items: <DropdownMenuItem<EngravingMode>>[
-                              for (final EngravingMode mode
-                                  in EngravingMode.values)
-                                DropdownMenuItem<EngravingMode>(
-                                  value: mode,
-                                  child: Text(mode.label),
-                                ),
-                            ],
-                            onChanged: (EngravingMode? mode) {
-                              if (mode != null) {
-                                setState(() => _mode = mode);
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          Text('Invertir', style: theme.textTheme.labelMedium),
-                          Switch(
-                            value: _invert,
-                            onChanged: (bool value) =>
-                                setState(() => _invert = value),
-                          ),
-                        ],
+                      SizedBox(
+                        width: 360,
+                        child: Slider(
+                          value: _threshold,
+                          divisions: 20,
+                          label: '${(_threshold * 100).toStringAsFixed(0)} %',
+                          onChanged: (double value) =>
+                              setState(() => _threshold = value),
+                        ),
                       ),
                     ],
-                  ),
-                  if (_mode == EngravingMode.threshold) ...<Widget>[
-                    const SizedBox(height: 12),
-                    Text(
-                      'Umbral: ${(_threshold * 100).toStringAsFixed(0)} %',
-                      style: theme.textTheme.labelSmall,
-                    ),
-                    SizedBox(
-                      width: 360,
-                      child: Slider(
-                        value: _threshold,
-                        divisions: 20,
-                        label: '${(_threshold * 100).toStringAsFixed(0)} %',
-                        onChanged: (double value) =>
-                            setState(() => _threshold = value),
-                      ),
-                    ),
                   ],
-                ],
+                ),
               ),
-            ),
+            if (state.operation == CamOperation.contour) _contourPanel(theme),
             const SizedBox(height: 16),
             _Panel(
               icon: Icons.play_circle_outline,
@@ -414,7 +643,7 @@ class _CamPageState extends ConsumerState<CamPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  if (state.result == null)
+                  if (!state.hasResult)
                     Text(
                       'Elige una imagen, ajusta los parámetros y pulsa '
                       '«Generar». La previsualización es obligatoria: el '
@@ -422,23 +651,16 @@ class _CamPageState extends ConsumerState<CamPage> {
                       style: theme.textTheme.bodySmall,
                     )
                   else ...<Widget>[
-                    _EngravingPreview(result: state.result!),
+                    _PathPreview(
+                      png: state.previewPng!,
+                      caption: state.operation == CamOperation.engrave
+                          ? 'Resultado del grabado: 1 celda = 1 píxel · '
+                                '${state.engraveResult!.columns} × '
+                                '${state.engraveResult!.rows}'
+                          : 'Contorno vectorizado: 1 píxel = 1 celda',
+                    ),
                     const SizedBox(height: 12),
-                    Text(
-                      'Tamaño: '
-                      '${state.result!.widthMm.toStringAsFixed(1)} × '
-                      '${state.result!.heightMm.toStringAsFixed(1)} mm · '
-                      '${state.result!.columns}×${state.result!.rows} celdas',
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${state.result!.lineCount} líneas · '
-                      '${(state.result!.litRatio * 100).toStringAsFixed(0)} % '
-                      'grabado · ${state.result!.mode.label} · S máx. '
-                      '${state.result!.maxPower}',
-                      style: theme.textTheme.bodySmall,
-                    ),
+                    ..._resultSummary(state, theme),
                   ],
                   const SizedBox(height: 12),
                   Wrap(
@@ -448,9 +670,16 @@ class _CamPageState extends ConsumerState<CamPage> {
                       FilledButton.icon(
                         onPressed: state.isBusy || !state.hasImage
                             ? null
-                            : () => ref
-                                  .read(camControllerProvider.notifier)
-                                  .generate(_settings),
+                            : () {
+                                final CamController controller = ref.read(
+                                  camControllerProvider.notifier,
+                                );
+                                if (state.operation == CamOperation.engrave) {
+                                  controller.generate(_settings);
+                                } else {
+                                  controller.generateContour(_contourSettings);
+                                }
+                              },
                         icon: state.isBusy
                             ? const SizedBox(
                                 width: 16,
@@ -463,7 +692,7 @@ class _CamPageState extends ConsumerState<CamPage> {
                         label: Text(state.isBusy ? 'Generando…' : 'Generar'),
                       ),
                       FilledButton.tonalIcon(
-                        onPressed: state.result == null
+                        onPressed: !state.hasResult
                             ? null
                             : () => ref
                                   .read(camControllerProvider.notifier)
