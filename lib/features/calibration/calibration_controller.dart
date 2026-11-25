@@ -8,6 +8,7 @@ import '../../data/serial/grbl_worker_client.dart';
 import '../../domain/entities/axis.dart';
 import '../../domain/entities/grbl_settings.dart';
 import '../../domain/entities/machine_profile.dart';
+import '../../domain/entities/machine_state.dart';
 import '../../domain/services/backlash_estimate.dart';
 import '../../domain/services/steps_per_mm_calibration.dart';
 import '../connection/connection_controller.dart';
@@ -135,6 +136,7 @@ class CalibrationController extends Notifier<CalibrationUiState> {
         clearError: true,
       );
       ref.read(activeProfileIdProvider.notifier).select(selected);
+      ref.invalidate(profilesProvider);
     } on Object catch (error) {
       state = state.copyWith(
         error: 'No se pudieron cargar los perfiles: $error',
@@ -182,6 +184,57 @@ class CalibrationController extends Notifier<CalibrationUiState> {
   }
 
   void setJogStep(double stepMm) => state = state.copyWith(jogStepMm: stepMm);
+
+  /// Desplaza la máquina al cero de trabajo en XY con `$J=`.
+  ///
+  /// Es un movimiento real: la UI debe confirmarlo. Se calcula el delta desde la
+  /// posición de trabajo actual (`WPos`), nunca con `G92`.
+  Future<void> goToWorkZero({bool includeZ = false}) async {
+    final GrblWorkerClient? client = _clientOrNull;
+    final ConnectionUiState connection = ref.read(connectionControllerProvider);
+    if (!_isConnected || client == null) {
+      state = state.copyWith(error: 'Conecta la máquina para moverte al cero.');
+      return;
+    }
+    if (connection.machineState != MachineState.idle) {
+      state = state.copyWith(
+        error:
+            'La máquina debe estar en Idle para ir al cero '
+            '(estado ${connection.machineState.label}).',
+      );
+      return;
+    }
+    final List<double>? position = connection.workPosition;
+    if (position == null || position.length < 2) {
+      state = state.copyWith(
+        error: 'Sin posición de trabajo: espera a la telemetría.',
+      );
+      return;
+    }
+    final Map<MachineAxis, double> values = <MachineAxis, double>{
+      MachineAxis.x: -position[0],
+      MachineAxis.y: -position[1],
+      if (includeZ && position.length >= 3) MachineAxis.z: -position[2],
+    }..removeWhere((MachineAxis axis, double value) => value.abs() < 1e-6);
+    if (values.isEmpty) {
+      state = state.copyWith(message: 'La máquina ya está en el cero.');
+      return;
+    }
+
+    state = state.copyWith(isBusy: true, clearError: true);
+    try {
+      await client.jog(values: values, feedMmPerMin: state.jogFeedMmMin);
+      state = state.copyWith(
+        isBusy: false,
+        message: 'Yendo al cero de trabajo a ${state.jogFeedMmMin} mm/min.',
+      );
+    } on Object catch (error) {
+      state = state.copyWith(
+        isBusy: false,
+        error: 'No se pudo ir al cero: $error',
+      );
+    }
+  }
 
   void setJogFeed(double feedMmMin) =>
       state = state.copyWith(jogFeedMmMin: feedMmMin);
@@ -242,6 +295,11 @@ class CalibrationController extends Notifier<CalibrationUiState> {
         settingsRevision: state.settingsRevision + 1,
         message: 'Parámetros leídos: ${settings.codes.length}.',
       );
+      // La EEPROM puede haber cambiado desde la conexión: se revalida el perfil
+      // activo para que el aviso aparezca al refrescar, no solo al conectar.
+      await ref
+          .read(connectionControllerProvider.notifier)
+          .revalidate(settings);
     } on Object catch (error) {
       state = state.copyWith(
         isBusy: false,

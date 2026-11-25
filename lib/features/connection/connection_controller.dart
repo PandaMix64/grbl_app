@@ -7,6 +7,7 @@ import '../../app/providers.dart';
 import '../../core/grbl/grbl_constants.dart';
 import '../../data/serial/grbl_worker_client.dart';
 import '../../domain/entities/grbl_handshake.dart';
+import '../../domain/entities/grbl_settings.dart';
 import '../../domain/entities/machine_profile.dart';
 import '../../domain/entities/machine_state.dart';
 import '../../domain/entities/status_report.dart';
@@ -178,6 +179,28 @@ class ConnectionController extends Notifier<ConnectionUiState> {
         error: 'Conexión fallida: $error',
       );
     }
+  }
+
+  /// Recalcula las discrepancias entre el perfil activo y una lectura fresca de
+  /// la EEPROM.
+  ///
+  /// Sin esto, el aviso solo aparecía al conectar: refrescar `$$` o aplicar el
+  /// perfil dejaba los `issues` desactualizados.
+  Future<void> revalidate(GrblSettings settings) async {
+    final MachineProfile? profile = await ref.read(
+      activeProfileProvider.future,
+    );
+    if (profile == null) {
+      state = state.copyWith(issues: const <ConsistencyIssue>[]);
+      return;
+    }
+    state = state.copyWith(
+      issues: ProfileConsistency.check(
+        profile: profile,
+        settings: settings,
+        parserState: state.handshake?.parserState,
+      ),
+    );
   }
 
   /// Cierra el puerto y detiene la telemetría.

@@ -33,6 +33,23 @@ class _StepsCalibrationPanelState extends ConsumerState<StepsCalibrationPanel> {
     return (value == null || value <= 0) ? null : value;
   }
 
+  /// Aplica la corrección y vacía la medición: evita reaplicar el mismo valor
+  /// por accidente (cada pulsación escribiría la EEPROM).
+  Future<void> _apply(
+    CalibrationController controller,
+    double commanded,
+    double measured,
+  ) async {
+    final double? applied = await controller.calibrateSteps(
+      axis: _axis,
+      commandedMm: commanded,
+      measuredMm: measured,
+    );
+    if (applied != null && mounted) {
+      setState(_measured.clear);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final CalibrationUiState state = ref.watch(calibrationControllerProvider);
@@ -154,11 +171,7 @@ class _StepsCalibrationPanelState extends ConsumerState<StepsCalibrationPanel> {
             const SizedBox(height: 12),
             FilledButton.icon(
               onPressed: connected && preview != null
-                  ? () => controller.calibrateSteps(
-                      axis: _axis,
-                      commandedMm: commanded!,
-                      measuredMm: measured!,
-                    )
+                  ? () => _apply(controller, commanded!, measured!)
                   : null,
               icon: const Icon(Icons.check),
               label: const Text('Aplicar corrección'),

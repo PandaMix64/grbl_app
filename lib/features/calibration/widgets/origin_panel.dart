@@ -19,6 +19,22 @@ class _OriginPanelState extends ConsumerState<OriginPanel> {
   bool _y = true;
   bool _z = false;
 
+  Future<void> _goToZero() async {
+    final bool ok = await confirmAction(
+      context,
+      title: 'Ir al cero de trabajo',
+      message:
+          'La máquina se desplazará a X0 Y0 del sistema de trabajo actual a '
+          '${ref.read(calibrationControllerProvider).jogFeedMmMin} mm/min. '
+          'Retira obstáculos del recorrido antes de continuar.',
+      confirmLabel: 'Ir al cero',
+    );
+    if (!ok || !mounted) {
+      return;
+    }
+    await ref.read(calibrationControllerProvider.notifier).goToWorkZero();
+  }
+
   Future<void> _home() async {
     final bool ok = await confirmAction(
       context,
@@ -80,6 +96,11 @@ class _OriginPanelState extends ConsumerState<OriginPanel> {
                     style: theme.textTheme.titleMedium,
                     overflow: TextOverflow.ellipsis,
                   ),
+                ),
+                TextButton.icon(
+                  onPressed: connected ? _goToZero : null,
+                  icon: const Icon(Icons.center_focus_strong, size: 18),
+                  label: const Text('Ir a X0 Y0'),
                 ),
                 TextButton.icon(
                   onPressed: connected ? _home : null,
