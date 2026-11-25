@@ -8,6 +8,7 @@ import '../../data/serial/grbl_worker_client.dart';
 import '../../domain/entities/axis.dart';
 import '../../domain/entities/grbl_settings.dart';
 import '../../domain/entities/machine_profile.dart';
+import '../../domain/services/backlash_estimate.dart';
 import '../../domain/services/steps_per_mm_calibration.dart';
 import '../connection/connection_controller.dart';
 
@@ -133,6 +134,7 @@ class CalibrationController extends Notifier<CalibrationUiState> {
         clearSelectedProfile: selected == null,
         clearError: true,
       );
+      ref.read(activeProfileIdProvider.notifier).select(selected);
     } on Object catch (error) {
       state = state.copyWith(
         error: 'No se pudieron cargar los perfiles: $error',
@@ -140,8 +142,10 @@ class CalibrationController extends Notifier<CalibrationUiState> {
     }
   }
 
-  void selectProfile(String? id) =>
-      state = state.copyWith(selectedProfileId: id, clearError: true);
+  void selectProfile(String? id) {
+    state = state.copyWith(selectedProfileId: id, clearError: true);
+    ref.read(activeProfileIdProvider.notifier).select(id);
+  }
 
   /// Guarda (crea o actualiza) un perfil validándolo antes.
   Future<bool> saveProfile(MachineProfile profile) async {
@@ -347,6 +351,159 @@ class CalibrationController extends Notifier<CalibrationUiState> {
       );
       return null;
     }
+  }
+
+  /// Estima la holgura de un eje y la guarda en el perfil activo.
+  Future<double?> calibrateBacklash({
+    required MachineAxis axis,
+    required double commandedMm,
+    required double measuredMm,
+  }) async {
+    if (axis == MachineAxis.z) {
+      state = state.copyWith(
+        error:
+            'La holgura de Z no se compensa: la fuerza de la herramienta la '
+            'hace impredecible.',
+      );
+      return null;
+    }
+    final MachineProfile? profile = state.selectedProfile;
+    if (profile == null) {
+      state = state.copyWith(
+        error: 'Selecciona un perfil antes de guardar la holgura.',
+      );
+      return null;
+    }
+    final BacklashEstimate estimate = BacklashEstimate(
+      commandedMm: commandedMm,
+      measuredMm: measuredMm,
+    );
+    final List<String> errors = estimate.validate();
+    if (errors.isNotEmpty) {
+      state = state.copyWith(error: errors.first);
+      return null;
+    }
+    final MachineProfile updated = axis == MachineAxis.x
+        ? profile.copyWith(backlashXmm: estimate.backlashMm)
+        : profile.copyWith(backlashYmm: estimate.backlashMm);
+    if (!await saveProfile(updated)) {
+      return null;
+    }
+    state = state.copyWith(
+      message:
+          'Holgura del eje ${axis.letter}: ${estimate.toProfileValue()} mm '
+          'guardada en el perfil.',
+    );
+    return estimate.backlashMm;
+  }
+
+  /// Escribe en la EEPROM los parámetros que definen el perfil activo.
+  ///
+  /// Solo envía lo que difiere: `$32` (modo láser), `$30` (RPM máx.) y
+  /// `$130-$132` (recorrido). El resto de parámetros no se toca.
+  Future<int> applyProfileToSettings() async {
+    final MachineProfile? profile = state.selectedProfile;
+    final GrblSettings? settings = state.settings;
+    final GrblWorkerClient? client = _clientOrNull;
+    if (profile == null) {
+      state = state.copyWith(error: 'Selecciona un perfil para aplicarlo.');
+      return 0;
+    }
+    if (settings == null) {
+      state = state.copyWith(
+        error: 'Lee primero los parámetros de la máquina.',
+      );
+      return 0;
+    }
+    if (!_isConnected || client == null) {
+      state = state.copyWith(
+        error: 'Conecta la máquina para aplicar el perfil.',
+      );
+      return 0;
+    }
+
+    final Map<int, String> target = <int, String>{
+      32: profile.usesLaserMode ? '1' : '0',
+      30: profile.maxSpindleRpm.toStringAsFixed(0),
+      130: profile.travelXmm.toStringAsFixed(3),
+      131: profile.travelYmm.toStringAsFixed(3),
+      132: profile.travelZmm.toStringAsFixed(3),
+    };
+    final Map<int, String> changes = <int, String>{
+      for (final MapEntry<int, String> entry in target.entries)
+        if (!_sameNumber(settings.rawValue(entry.key), entry.value))
+          entry.key: entry.value,
+    };
+    if (changes.isEmpty) {
+      state = state.copyWith(
+        message: 'La máquina ya coincide con el perfil: nada que aplicar.',
+      );
+      return 0;
+    }
+
+    state = state.copyWith(isBusy: true, clearError: true);
+    try {
+      final int written = await client.writeSettings(changes);
+      await refreshSettings();
+      state = state.copyWith(
+        isBusy: false,
+        message: 'Perfil aplicado a la máquina: $written parámetros.',
+      );
+      return written;
+    } on Object catch (error) {
+      state = state.copyWith(
+        isBusy: false,
+        error: 'No se pudo aplicar el perfil: $error',
+      );
+      return 0;
+    }
+  }
+
+  /// Lanza el ciclo de homing (`$H`).
+  Future<void> home() async {
+    final GrblWorkerClient? client = _clientOrNull;
+    if (!_isConnected || client == null) {
+      state = state.copyWith(error: 'Conecta la máquina para hacer homing.');
+      return;
+    }
+    try {
+      await client.home();
+      state = state.copyWith(
+        message: 'Homing lanzado. Espera a que termine antes de mover.',
+      );
+    } on Object catch (error) {
+      state = state.copyWith(error: 'Homing fallido: $error');
+    }
+  }
+
+  /// Fija el cero de trabajo actual en G54 (`G10 L20 P1`).
+  Future<void> setWorkZero({
+    bool x = true,
+    bool y = true,
+    bool z = true,
+  }) async {
+    final GrblWorkerClient? client = _clientOrNull;
+    if (!_isConnected || client == null) {
+      state = state.copyWith(error: 'Conecta la máquina para fijar el origen.');
+      return;
+    }
+    try {
+      await client.setWorkZero(x: x, y: y, z: z);
+      state = state.copyWith(
+        message: 'Origen de trabajo fijado en G54 (G10 L20 P1).',
+      );
+    } on Object catch (error) {
+      state = state.copyWith(error: 'No se pudo fijar el origen: $error');
+    }
+  }
+
+  static bool _sameNumber(String? current, String target) {
+    final double? a = double.tryParse(current ?? '');
+    final double? b = double.tryParse(target);
+    if (a == null || b == null) {
+      return false;
+    }
+    return (a - b).abs() < 1e-6;
   }
 
   static Map<int, String> _draftFrom(GrblSettings settings) {

@@ -2,7 +2,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../../domain/entities/machine_profile.dart';
+import '../../connection/connection_controller.dart';
 import '../calibration_controller.dart';
+import 'confirm_dialog.dart';
 import 'profile_dialog.dart';
 
 /// Lista de perfiles de máquina con creación, edición y borrado.
@@ -15,6 +17,7 @@ class ProfilesPanel extends ConsumerWidget {
     final CalibrationController controller = ref.read(
       calibrationControllerProvider.notifier,
     );
+    final bool connected = ref.watch(connectionControllerProvider).isConnected;
     final ThemeData theme = Theme.of(context);
 
     return Card(
@@ -83,10 +86,44 @@ class ProfilesPanel extends ConsumerWidget {
                   ),
                   onTap: () => controller.selectProfile(profile.id),
                 ),
+            if (state.selectedProfile != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: FilledButton.tonalIcon(
+                  onPressed: connected
+                      ? () =>
+                            _applyProfile(context, ref, state.selectedProfile!)
+                      : null,
+                  icon: const Icon(Icons.upload_outlined),
+                  label: const Text('Aplicar perfil a la máquina'),
+                ),
+              ),
           ],
         ),
       ),
     );
+  }
+
+  static Future<void> _applyProfile(
+    BuildContext context,
+    WidgetRef ref,
+    MachineProfile profile,
+  ) async {
+    final bool ok = await confirmAction(
+      context,
+      title: 'Aplicar perfil a la máquina',
+      message:
+          'Se escribirán en la EEPROM el modo de herramienta, las RPM máximas '
+          'y el recorrido (límites del volumen) del perfil «${profile.name}». '
+          'Solo se envían los valores que difieran de la máquina.',
+      confirmLabel: 'Aplicar',
+    );
+    if (!ok) {
+      return;
+    }
+    await ref
+        .read(calibrationControllerProvider.notifier)
+        .applyProfileToSettings();
   }
 
   static Future<void> _edit(

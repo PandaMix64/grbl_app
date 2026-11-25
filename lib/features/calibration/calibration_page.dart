@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'calibration_controller.dart';
+import 'widgets/backlash_panel.dart';
 import 'widgets/jog_panel.dart';
+import 'widgets/origin_panel.dart';
 import 'widgets/profiles_panel.dart';
 import 'widgets/settings_panel.dart';
 import 'widgets/steps_panel.dart';
@@ -58,9 +60,13 @@ class _CalibrationPageState extends ConsumerState<CalibrationPage> {
               ),
             const JogPanel(),
             const SizedBox(height: 16),
+            const OriginPanel(),
+            const SizedBox(height: 16),
             const SettingsPanel(),
             const SizedBox(height: 16),
             const StepsCalibrationPanel(),
+            const SizedBox(height: 16),
+            const BacklashPanel(),
             const SizedBox(height: 16),
             const ProfilesPanel(),
           ],

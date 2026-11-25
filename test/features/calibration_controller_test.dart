@@ -188,4 +188,108 @@ void main() {
       expect(state().error, isNull);
     });
   });
+
+  group('holgura mecánica', () {
+    test('guarda la holgura estimada en el perfil activo', () async {
+      await controller().saveProfile(profile);
+
+      final double? result = await controller().calibrateBacklash(
+        axis: MachineAxis.x,
+        commandedMm: 5,
+        measuredMm: 4.7,
+      );
+
+      expect(result, closeTo(0.3, 1e-9));
+      final MachineProfile? saved = await database.profileById('p1');
+      expect(saved!.backlashXmm, closeTo(0.3, 1e-9));
+      expect(state().message, contains('0.300'));
+    });
+
+    test('rechaza holgura en Z', () async {
+      await controller().saveProfile(profile);
+
+      final double? result = await controller().calibrateBacklash(
+        axis: MachineAxis.z,
+        commandedMm: 5,
+        measuredMm: 4.5,
+      );
+
+      expect(result, isNull);
+      expect(state().error, contains('Z'));
+    });
+
+    test('rechaza medidas imposibles sin tocar el perfil', () async {
+      await controller().saveProfile(profile);
+
+      final double? result = await controller().calibrateBacklash(
+        axis: MachineAxis.y,
+        commandedMm: 5,
+        measuredMm: 6,
+      );
+
+      expect(result, isNull);
+      expect(state().error, contains('supera lo ordenado'));
+      final MachineProfile? saved = await database.profileById('p1');
+      expect(saved!.backlashYmm, 0);
+    });
+  });
+
+  group('aplicar perfil a la máquina', () {
+    test('no escribe nada si la EEPROM ya coincide', () async {
+      await connect();
+      await controller().refreshSettings();
+      await controller().saveProfile(profile);
+
+      final int written = await controller().applyProfileToSettings();
+
+      expect(written, 0);
+      expect(state().message, contains('ya coincide'));
+      expect(
+        port.writtenLines.where((String line) => line.startsWith(r'$13')),
+        isEmpty,
+      );
+    });
+
+    test('escribe solo lo que difiere', () async {
+      await connect();
+      await controller().refreshSettings();
+      await controller().saveProfile(profile.copyWith(travelZmm: 40));
+
+      final int written = await controller().applyProfileToSettings();
+
+      expect(written, 1);
+      expect(port.writtenLines, contains(r'$132=40.000'));
+    });
+
+    test('sin perfil seleccionado no intenta escribir', () async {
+      expect(await controller().applyProfileToSettings(), 0);
+      expect(state().error, contains('Selecciona un perfil'));
+    });
+  });
+
+  group('homing y origen de trabajo', () {
+    test('homing envía el comando al controlador', () async {
+      await connect();
+
+      await controller().home();
+
+      expect(port.writtenLines, contains(r'$H'));
+      expect(state().message, contains('Homing'));
+    });
+
+    test('fija el cero con G10 L20 en los ejes elegidos', () async {
+      await connect();
+
+      await controller().setWorkZero(x: true, y: false, z: false);
+
+      expect(port.writtenLines, contains('G10 L20 P1 X0'));
+      expect(state().message, contains('G10 L20'));
+    });
+
+    test('sin conexión avisa', () async {
+      await controller().setWorkZero();
+
+      expect(state().error, contains('Conecta'));
+    });
+  });
 }

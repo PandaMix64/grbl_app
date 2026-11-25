@@ -135,9 +135,9 @@ class ConnectionController extends Notifier<ConnectionUiState> {
     state = state.copyWith(isBusy: true, clearError: true);
     try {
       final GrblWorkerClient client = await ref.read(grblWorkerProvider.future);
-      final MachineProfile? profile = await ref
-          .read(databaseProvider)
-          .mostRecentProfile();
+      final MachineProfile? profile = await ref.read(
+        activeProfileProvider.future,
+      );
 
       final GrblHandshake handshake = await client.connect(
         portName: port,
