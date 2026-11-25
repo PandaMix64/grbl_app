@@ -141,7 +141,21 @@ permite pausar, reanudar y detener:
   última línea confirmada. Verifica `$G`/`$#` contra lo guardado y exige que la máquina esté a ≤ 1 mm del punto
   guardado (botón **Llevar al punto guardado**); si algo no coincide, se cancela en lugar de arriesgar la pieza.
 
+## Trazado (plóter)
+
+Pestaña dedicada a **dibujar con rotulador**, con dos procesados de imagen:
+
+- **Rutas vectoriales**: silueta vectorizada, simplificada y **ordenada por proximidad** para minimizar los viajes con
+  el rotulador levantado. Ideal para line-art y contornos.
+- **Bordado raster**: líneas paralelas que rellenan las zonas oscuras, con **separación, ángulo y puntadas**
+  configurables; el zigzag entre líneas reduce los desplazamientos.
+- **Rotulador** configurable: `M3 S…`/`M5` (servo en el husillo) o `G1 Z…`/`G0 Z…` (eje Z), con avances de dibujo y de
+  viaje separados.
+- Vista previa del dibujo, validación de volumen del perfil y **envío al visor** (nunca directo a la máquina).
+
+
 ## CAM
+
 
 `CAM` convierte una **imagen** (PNG/JPG/BMP) en G-code, en dos modos:
 

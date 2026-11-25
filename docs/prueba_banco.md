@@ -162,7 +162,24 @@ herramienta montada.
 
 ---
 
-## 13. Cierre
+## 13. Trazado con plóter (S-16)
+
+Con un rotulador montado: **sin herramienta de corte**, pero el rotulador debe tocar el papel con la altura de bajada
+correcta.
+
+| Paso | Acción | Esperado |
+| :--- | :--- | :--- |
+| 13.1 | Pestaña **Trazado** → «Elegir imagen» y «Valores del perfil» | Ancho y avances tomados del perfil |
+| 13.2 | Modo **Rutas vectoriales**, simplificar 0.15 mm | Vista previa del contorno y resumen con número de trayectos |
+| 13.3 | Ejecutar y observar los viajes | El rotulador sube entre trayectos y el orden minimiza los desplazamientos |
+| 13.4 | Cambiar a **Bordado raster** con separación 2 mm y ángulo 45° | Relleno de líneas paralelas; zigzag entre líneas |
+| 13.5 | Añadir puntada de 3 mm | El relleno se ve a trazos (efecto bordado) |
+| 13.6 | Cambiar el rotulador a **eje Z** | Baja/sube con `G1 Z`/`G0 Z` en lugar de `M3 S`/`M5` |
+| 13.7 | Enviar al visor y ejecutar | Se revisa el dibujo antes de empezar; el archivo termina en `_trazado.gcode` |
+
+---
+
+## 14. Cierre
 
 - Volcar los resultados en `ESTADO_PROYECTO.md` (sección de riesgos: R-10, R-13, R-19).
 - Si todo pasa, cerrar R-10 y planificar el flujo «reiniciar trabajo guardado» (R-18).

@@ -723,6 +723,48 @@ Recuperación de la sesión: `git log --oneline --grep="S-15"`.
 
 ---
 
+### S-16 — 2026-11-24 · Módulo de trazado para plóter (M4.3)
+
+**Alcance:** pestaña dedicada a **dibujar con rotulador**, con dos procesados de imagen: rutas vectoriales optimizadas y bordado raster para dibujos complejos.
+
+**Entregado**
+
+| # | Cambio | Archivo(s) | Estado |
+| :--- | :--- | :--- | :--- |
+| 1 | `ContourTracer` compartido (trazado + Douglas–Peucker) usado por CAM y trazado | `lib/domain/services/contour_tracer.dart` | ✅ |
+| 2 | `PlotGenerator`: modo **vectorial** con contornos cerrados y orden por proximidad | `lib/domain/services/plot_generator.dart` | ✅ |
+| 3 | `PlotGenerator`: modo **bordado raster** con separación, ángulo y puntadas | `plot_generator.dart` | ✅ |
+| 4 | Control de rotulador configurable: `M3 S…`/`M5` o `G1 Z…`/`G0 Z…` | `plot_generator.dart` | ✅ |
+| 5 | Vista previa del dibujo (vectorial o tramado) | `plot_generator.dart` | ✅ |
+| 6 | `PlotController` y pantalla **Trazado · Plóter** con selector de modo | `lib/features/plot/` | ✅ |
+| 7 | Nueva pestaña **Trazado** en la navegación | `lib/app/home_shell.dart` | ✅ |
+| 8 | 12 pruebas nuevas (248 en verde, 1 saltada) | `test/domain/plot_generator_test.dart`, `test/features/plot_controller_test.dart`, `test/widget_test.dart` | ✅ |
+
+**Verificaciones ejecutadas:** `dart format --set-exit-if-changed` → 0 cambios · `flutter analyze` → *No issues found* · `flutter test` → **248 en verde, 1 saltada** · `flutter build windows --debug` → OK.
+
+**Decisiones de diseño**
+
+- El trazado de siluetas se **comparte** con el CAM de contornos: un solo algoritmo y un solo juego de pruebas.
+- **Vectorial**: contornos cerrados simplificados y ordenados por vecino más cercano (eligiendo el extremo más próximo) para minimizar los viajes con el rotulador levantado.
+- **Bordado raster**: líneas paralelas con ángulo configurable y zigzag entre líneas; `stitchMm` divide cada pasada en puntadas para el efecto de bordado.
+- El rotulador se controla por **husillo** (`M3 S…`/`M5`, típico de un servo en el eje del spindle) o por **Z** (`G1 Z…`/`G0 Z…`), sin asumir hardware.
+- Igual que el CAM, el resultado **nunca se envía**: se carga en el visor para revisarlo y ejecutarlo con las barreras de seguridad.
+
+**Decisiones tomadas:** ADR-043, ADR-044.
+
+**Trazabilidad (commits de S-16):**
+
+| Hash | Commit |
+| :--- | :--- |
+| `c4390cd` | `refactor(cam): extrae el trazado de contornos a un servicio compartido` |
+| `ed76e6b` | `feat(plot): pestana de trazado con rutas vectoriales y bordado raster` |
+
+Recuperación de la sesión: `git log --oneline --grep="S-16"`.
+
+**Abierto al cierre:** sin relleno en espiral (solo tramado recto) y sin simulación de ancho de trazo.
+
+---
+
 ## 5. Decisiones de arquitectura (ADR resumidas)
 
 | ID | Decisión | Motivo | Consecuencia |
@@ -769,6 +811,8 @@ Recuperación de la sesión: `git log --oneline --grep="S-15"`.
 | ADR-040 | Una sola operación CAM activa (Grabado o Contorno) | Mostrar una vista previa de grabado junto a parámetros de corte confunde y es peligroso | Cambiar de operación descarta el resultado anterior |
 | ADR-041 | Relieve 2.5D por bandas acumulativas con pasadas por nivel | Un desbaste continuo exige algoritmos de offset que no aportan en esta fase | Escalera de profundidad predecible y testeable; celda de nivel L se corta en 1..L |
 | ADR-042 | El relieve exige perfil de fresadora | Usa `M3` y `Z`; con láser el equivalente es el grabado en escala de grises | Error explicativo si el perfil no es de fresadora |
+| ADR-043 | El trazado de contornos y la simplificación viven en `ContourTracer` | CAM y plóter necesitaban lo mismo y duplicarlo garantiza divergencias | Un solo algoritmo con una sola batería de pruebas |
+| ADR-044 | Plóter con rotulador configurable (`M3 S…`/`M5` o `G1 Z…`/`G0 Z…`) y dos modos de dibujo | No todos los plóters usan servo ni todos los trabajos son line-art | Vectorial con orden por proximidad y bordado raster con ángulo/puntadas |
 
 ---
 
