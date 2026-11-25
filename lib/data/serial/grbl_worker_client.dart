@@ -311,6 +311,13 @@ class GrblWorkerClient {
     return (data[GrblWorkerKey.written] as num?)?.toInt() ?? 0;
   }
 
+  /// Fija el cero de trabajo actual en G54 (`G10 L20 P1`).
+  Future<void> setWorkZero({bool x = true, bool y = true, bool z = true}) {
+    return _send(GrblWorkerCommand.setWorkZero, <String, Object?>{
+      GrblWorkerKey.axes: <String>[if (x) 'x', if (y) 'y', if (z) 'z'],
+    });
+  }
+
   Future<GrblSettings> readSettings() async =>
       GrblSettings.fromJson(await _send(GrblWorkerCommand.readSettings));
 

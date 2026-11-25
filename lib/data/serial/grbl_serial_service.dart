@@ -269,6 +269,35 @@ class GrblSerialService {
   /// Puertos seriales disponibles en el sistema.
   Future<List<SerialPortInfo>> listPorts() => _port.listPorts();
 
+  /// Fija el cero de trabajo actual con `G10 L20 P1`.
+  ///
+  /// Es la forma recomendada por GRBL: modifica el offset de G54 y **persiste**
+  /// en EEPROM, a diferencia de `G92` (no persistente y desaconsejado).
+  void setWorkZero({bool x = true, bool y = true, bool z = true}) {
+    _requireConnected();
+    if (!x && !y && !z) {
+      throw ArgumentError('Selecciona al menos un eje para fijar el origen.');
+    }
+    if (state.isBlocked) {
+      throw GrblSafetyException(
+        'La máquina está en ${state.label}: desbloquea con \$X y haz homing '
+        'antes de fijar el origen de trabajo.',
+      );
+    }
+    final List<String> words = <String>['G10', 'L20', 'P1'];
+    if (x) {
+      words.add('X0');
+    }
+    if (y) {
+      words.add('Y0');
+    }
+    if (z) {
+      words.add('Z0');
+    }
+    _buffer.enqueue(words.join(' '));
+    _pump();
+  }
+
   /// Ejecuta un jog (`$J=`).
   ///
   /// GRBL solo acepta jogs en `Idle` o `Jog`; en cualquier otro estado devolvería

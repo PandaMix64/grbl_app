@@ -26,6 +26,7 @@ abstract final class GrblWorkerCommand {
   static const String dispose = 'dispose';
   static const String jog = 'jog';
   static const String writeSettings = 'writeSettings';
+  static const String setWorkZero = 'setWorkZero';
 }
 
 /// Eventos worker → cliente.
@@ -61,4 +62,5 @@ abstract final class GrblWorkerKey {
   static const String absolute = 'absolute';
   static const String changes = 'changes';
   static const String written = 'written';
+  static const String axes = 'axes';
 }

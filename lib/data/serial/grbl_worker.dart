@@ -201,6 +201,19 @@ class GrblWorker {
           }
           final int written = await _service.writeSettings(changes);
           _reply(id, <String, Object?>{GrblWorkerKey.written: written});
+        case GrblWorkerCommand.setWorkZero:
+          final Object? axes = raw[GrblWorkerKey.axes];
+          if (axes is! List) {
+            throw const GrblWorkerException(
+              'El comando setWorkZero requiere la lista de ejes.',
+            );
+          }
+          _service.setWorkZero(
+            x: axes.contains('x'),
+            y: axes.contains('y'),
+            z: axes.contains('z'),
+          );
+          _reply(id);
         case GrblWorkerCommand.readSettings:
           final GrblSettings settings = await _service.readSettings();
           _reply(id, settings.toJson());

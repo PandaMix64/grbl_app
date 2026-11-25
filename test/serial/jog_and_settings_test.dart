@@ -105,4 +105,45 @@ void main() {
       await expectLater(pending, throwsA(isA<GrblProtocolException>()));
     });
   });
+
+  group('origen de trabajo', () {
+    test('fija el cero en G54 con G10 L20 P1', () async {
+      service.setWorkZero();
+
+      await waitUntil(
+        () => port.writtenLines.any(
+          (String line) => line.startsWith('G10 L20 P1'),
+        ),
+      );
+
+      expect(port.writtenLines.last, 'G10 L20 P1 X0 Y0 Z0');
+    });
+
+    test('permite fijar solo algunos ejes', () async {
+      service.setWorkZero(z: false);
+
+      await waitUntil(
+        () => port.writtenLines.any(
+          (String line) => line.startsWith('G10 L20 P1'),
+        ),
+      );
+
+      expect(port.writtenLines.last, 'G10 L20 P1 X0 Y0');
+      expect(port.writtenLines.last, isNot(contains('Z0')));
+    });
+
+    test('exige al menos un eje', () {
+      expect(
+        () => service.setWorkZero(x: false, y: false, z: false),
+        throwsArgumentError,
+      );
+    });
+
+    test('no fija origen en estado Alarm', () async {
+      port.state = 'Alarm';
+      await waitUntil(() => service.state == MachineState.alarm);
+
+      expect(() => service.setWorkZero(), throwsA(isA<GrblSafetyException>()));
+    });
+  });
 }
