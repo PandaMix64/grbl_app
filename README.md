@@ -15,7 +15,7 @@ Flutter + Material Design 3, Clean Architecture con gestión de estado reactiva,
 | Fase 2 — Calibración | ✅ Cerrada |
 | Fase 3 — Visor 3D | 🟡 En curso (visor y ejecución listos) |
 | Fase 4 — Generador CAM | ✅ Cerrada (grabado, contornos y relieve) |
-| Fase 5 — Optimización y empaquetado | ⬜ Pendiente |
+| Fase 5 — Optimización y empaquetado | 🟡 En curso (APK y release de Windows) |
 
 El detalle de tareas, decisiones (ADR), riesgos y bitácora de cada sesión vive en **[`ESTADO_PROYECTO.md`](ESTADO_PROYECTO.md)**. Empieza por ahí si retomas el proyecto.
 
@@ -26,11 +26,13 @@ El detalle de tareas, decisiones (ADR), riesgos y bitácora de cada sesión vive
 | [`docs/ruta_de_accion_entorno_cnc_flutter_y_grbl.md`](docs/ruta_de_accion_entorno_cnc_flutter_y_grbl.md) | Plan original del autor (arquitectura, protocolo GRBL, módulos, fases) |
 | [`docs/revision_tecnica_ruta_de_accion.md`](docs/revision_tecnica_ruta_de_accion.md) | Revisión contra la especificación oficial de GRBL v1.1h: hallazgos P0/P1/P2 y parches propuestos |
 | [`ESTADO_PROYECTO.md`](ESTADO_PROYECTO.md) | Tablero de avance, ADR, riesgos y bitácora de sesiones |
+| [`docs/empaquetado.md`](docs/empaquetado.md) | Build de Windows y APK de Android: requisitos, firma y limitaciones |
 
 ## Requisitos
 
 - Flutter 3.50.1 / Dart 3.14.0 o superior (`channel stable`).
-- Windows 10+, Linux, macOS o Android 8+ con USB-OTG.
+- Windows 10+, Linux o macOS con puerto USB; Android 8+ (sin conexión serie, ver
+  [Empaquetado](#empaquetado)).
 - Controlador GRBL v1.1h a 115200 baudios, 8-N-1.
 
 ## Dependencias principales
@@ -40,7 +42,7 @@ El detalle de tareas, decisiones (ADR), riesgos y bitácora de cada sesión vive
 | `flutter_riverpod` | ^3.5.0 | Estado e inyección de dependencias (ADR-001) |
 | `material_ui` | ^1.11.1 | Widgets Material 3 (reemplaza `package:flutter/material.dart`, deprecado) |
 | `drift` / `drift_flutter` | ^2.35.4 / ^0.3.1 | Persistencia SQLite multiplataforma |
-| `flutter_libserialport` | ^0.6.0 | Acceso serial nativo (FFI) |
+| `flutter_libserialport` | ^0.6.0 | Acceso serial nativo (FFI); parche local para Gradle 9 (ADR-046) |
 | `vector_math` | ^2.4.4 | Geometría 3D del visor (`vector_math_64`) |
 | `image` / `file_selector` | ^4.13.1 / ^1.1.0 | Entrada del motor CAM |
 | `custom_lint` / `riverpod_lint` | — | *(pendiente de decidir)* |
@@ -208,6 +210,31 @@ dart run build_runner build --delete-conflicting-outputs
 `ProjectRepository.persistAndConfirm()` guarda el punto de reanudación en disco y **solo después** confirma al worker; si la escritura falla, no se envía el soft reset y la máquina queda en `Hold` con la herramienta apagada.
 
 
+
+## Empaquetado
+
+Los artefactos se compilan desde el repositorio; la guía completa (requisitos de
+SDK, firma, limitaciones por plataforma) está en
+[`docs/empaquetado.md`](docs/empaquetado.md).
+
+```powershell
+flutter build windows --release                 # build\windows\x64\runner\Release\
+flutter build apk --release --split-per-abi     # ~19-22 MB por ABI
+flutter build apk --release                     # universal, ~62 MB
+```
+
+El APK de Android incluye `libsqlite3.so` y `libserialport.so` por ABI y la
+etiqueta visible es **GRBL CNC**. Mientras no exista `android/key.properties` se
+firma con la clave de depuración.
+
+**En Android no hay conexión serie** (ADR-047): el plugin no gestiona el permiso
+USB del `UsbManager`, así que la app bloquea «Conectar» con un aviso y se limita
+a preparar trabajo (CAM, plóter, visor) que luego se envía desde el escritorio.
+
+La única dependencia `vendorizada` es `flutter_libserialport`
+(`third_party/flutter_libserialport`, ver ADR-046): su build de Android no
+funciona con Gradle 9 y se sustituyó por `build.gradle.kts`. Se activa con
+`dependency_overrides` en `pubspec.yaml`.
 
 ## Convenciones
 

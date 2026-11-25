@@ -33,10 +33,9 @@
 | **Fase 0: Fundaciones** | Repo, entorno, contratos de dominio, fachada serial, política de seguridad | 🟢 **Cerrada salvo licencia y CHANGELOG** | Añadida por la revisión técnica; M0.1–M0.3 entregados en S-02 |
 | **Fase 1: Núcleo y Serial** | Clean Architecture, esquema SQLite, navegación M3, isolate serial con *character-counting* | ✅ **Cerrada** | Conexión, handshake, worker, Drift, providers y barra de conexión entregados |
 | **Fase 2: Calibración** | Jogging, pasos/mm, parámetros `$`, perfiles y *backlash* | ✅ **Cerrada** | Jogging, parámetros, pasos/mm, perfiles, holgura, homing y origen |
-| **Fase 3: Visor 3D** | Renderizado, interpretación de G-code, pausa/detención y reanudación segura | 🟡 **En curso (~45 %)** | Intérprete, proyección, pintor y visor con telemetría listos; falta ejecución y pausa |
-| **Fase 3: Visor 3D** | Renderizado, interpretación de G-code, pausa/detención y reanudación segura | ⬜ Pendiente | `ResumeState` y `MotionSegment` ya existen; falta persistencia y render |
+| **Fase 3: Visor 3D** | Renderizado, interpretación de G-code, pausa/detención y reanudación segura | ✅ **Cerrada** | Visor, ejecución con progreso real, pausa persistente, `interrupted` y reanudación verificada (S-08–S-11) |
 | **Fase 4: Generador CAM** | Imagen → G-code (vectorización, dithering, relieve 2.5D) | ✅ Cerrada (grabado, contornos con pestañas y relieve) | Modo láser requiere `$32` (P1-1) |
-| **Fase 5: Optimización y Empaquetado** | Rendimiento, atajos, builds Windows/Linux/macOS/Android | ⬜ Pendiente | — |
+| **Fase 5: Optimización y Empaquetado** | Rendimiento, atajos, builds Windows/Linux/macOS/Android | 🟡 En curso | APK de Android y release de Windows listos (S-18); faltan isolate (R-17), atajos, Linux/macOS, CHANGELOG y licencia |
 
 Leyenda: 🟡 en curso · ✅ cerrada · ⬜ pendiente · 🔴 bloqueada
 
@@ -801,6 +800,55 @@ Recuperación de la sesión: `git log --oneline --grep="S-17"`.
 
 ---
 
+### S-18 — 2026-11-25 · Primer APK de Android (Fase 5)
+
+**Alcance:** sacar el primer APK instalable, adaptando el proyecto a la cadena de
+Android que exige Flutter 3.50 y dejando documentado cómo firmarlo.
+
+**Entregado**
+
+| # | Cambio | Archivo(s) | Estado |
+| :--- | :--- | :--- | :--- |
+| 1 | Andamiaje de Android regenerado con la plantilla 3.50: Gradle 9.5.0, AGP 9.3.1, Kotlin 2.4.20, Java 17 | `android/**` | ✅ |
+| 2 | Wrapper de Gradle versionado (`gradlew`, `gradlew.bat`, `gradle-wrapper.jar`) para que un clon limpio compile | `.gitignore` | ✅ |
+| 3 | `flutter_libserialport` vendorizado con `android/build.gradle.kts` para Gradle 9 (`jcenter()` fuera, `compileSdk 36`, CMake intacto) | `third_party/flutter_libserialport/**`, `pubspec.yaml` | ✅ |
+| 4 | Etiqueta **GRBL CNC** y `uses-feature usb.host` no requerida | `AndroidManifest.xml` | ✅ |
+| 5 | Firma de release opcional por `android/key.properties`, con caída a la clave de depuración | `android/app/build.gradle.kts` | ✅ |
+| 6 | Conexión serie bloqueada con aviso fuera de escritorio (`serialSupportProvider`) | `lib/core/platform_capabilities.dart`, `connection_controller.dart`, `connection_bar.dart` | ✅ |
+| 7 | Guía de empaquetado (requisitos, firma, ABIs, limitaciones) | `docs/empaquetado.md`, `README.md` | ✅ |
+
+**Artefactos:** `app-armeabi-v7a-release.apk` (19,3 MB), `app-arm64-v8a-release.apk`
+(21,1 MB), `app-x86_64-release.apk` (22,3 MB) y universal (61,9 MB). Contienen
+`libapp.so`, `libflutter.so`, `libsqlite3.so`, `libdartjni.so` y `libserialport.so`
+por ABI; `minSdk 24`, `targetSdk 36`.
+
+**Verificaciones ejecutadas:** `dart format --set-exit-if-changed` → 0 cambios ·
+`flutter analyze` → *No issues found* · `flutter test` → **251 en verde, 1 saltada** ·
+`flutter build apk --release --split-per-abi` → OK · `flutter build windows --debug`
+→ OK · `aapt2 dump badging` → paquete, etiqueta y SDK correctos. La instalación en
+un móvil real quedó **pendiente**: HyperOS exige activar «Instalar por USB»
+(`INSTALL_FAILED_USER_RESTRICTED`).
+
+**Decisiones de diseño**
+
+- La cadena de Android se **regenera** desde la plantilla de la versión de Flutter en
+  uso en lugar de parchear la vieja: evita arrastrar incompatibilidades de AGP 8.
+- El plugin se **vendoriza** solo en su build de Android; cualquier otra vía (bajar
+  Gradle y saltarse la validación con `--android-skip-build-dependency-validation`)
+  deja el proyecto en una configuración que Flutter ya no soporta.
+- En Android se **oculta** la conexión serie en vez de mostrar el error nativo: sin
+  flujo de permiso USB el `open()` falla con un mensaje que no ayuda al operario.
+- La firma real es **opcional por fichero**: el build funciona en local y en CI sin
+  secretos, y en cuanto existe `key.properties` se usa el keystore de publicación.
+
+**Decisiones tomadas:** ADR-046, ADR-047.
+
+**Abierto al cierre:** habilitar serie en Android (permiso `UsbManager` + apertura por
+descriptor), icono de la app (sigue el de la plantilla), builds Linux/macOS e isolate
+de parseo (R-17).
+
+---
+
 ## 5. Decisiones de arquitectura (ADR resumidas)
 
 | ID | Decisión | Motivo | Consecuencia |
@@ -850,6 +898,8 @@ Recuperación de la sesión: `git log --oneline --grep="S-17"`.
 | ADR-043 | El trazado de contornos y la simplificación viven en `ContourTracer` | CAM y plóter necesitaban lo mismo y duplicarlo garantiza divergencias | Un solo algoritmo con una sola batería de pruebas |
 | ADR-044 | Plóter con rotulador configurable (`M3 S…`/`M5` o `G1 Z…`/`G0 Z…`) y dos modos de dibujo | No todos los plóters usan servo ni todos los trabajos son line-art | Vectorial con orden por proximidad y bordado raster con ángulo/puntadas |
 | ADR-045 | Suavizado por promedio de vecinos con conservación de esquinas, antes de simplificar | Las diagonales salían como escalera de píxeles con decenas de micro-movimientos | `smoothMm` (0 = sin suavizar); esquinas con desviación > 1,5 × ventana se mantienen |
+| ADR-046 | Vendorizar `flutter_libserialport` (0.6.0) con un `android/build.gradle.kts` propio | Flutter 3.50 exige Gradle 9.5/AGP 9.3.1 y el build publicado usa `jcenter()` + AGP 8.7, que Gradle 9 ya no evalúa | Solo cambia el build de Android; el código Dart y las compilaciones CMake de escritorio son los publicados. Revisar al actualizar el plugin |
+| ADR-047 | En Android la conexión serie se declara no soportada y se bloquea con aviso | Abrir el USB exige permiso del `UsbManager` y apertura por descriptor, flujo que el plugin no implementa; el error nativo no es accionable | `PlatformCapabilities.serialSupported` + `serialSupportProvider`; el APK se limita a CAM, plóter y visor |
 
 ---
 
@@ -869,7 +919,7 @@ Recuperación de la sesión: `git log --oneline --grep="S-17"`.
 | ID | Riesgo | Impacto | Mitigación | Estado |
 | :--- | :--- | :--- | :--- | :--- |
 | R-01 | Pausa (`!`) con herramienta activa | Incendio / lesión | Secuencia `!` → `0x9E`, implementada en `SafetyController` (P0-1) | 🔴 Abierto |
-| R-02 | `flutter_libserialport` sin mantenimiento (0.6.0, >1 año) | Bloqueo de plataforma | Fachada propia + segunda implementación sobre `libserialport` | 🟡 Mitigado en diseño |
+| R-02 | `flutter_libserialport` sin mantenimiento (0.6.0, >1 año) | Bloqueo de plataforma | Fachada propia + segunda implementación sobre `libserialport`. En S-18 se vendoriza para Gradle 9 (ADR-046) y en Android la serie se declara no soportada (ADR-047) | 🟡 Mitigado en diseño |
 | R-03 | SDK Flutter desactualizado | Dependencias antiguas o incompatibles | Resuelto en S-02: Flutter 3.50.1 / Dart 3.14.0 | ✅ Cerrado |
 | R-04 | Sin emulador GRBL no se puede probar streaming ni alarmas | Errores detectados sólo en hardware | Puerto falso + emulador antes de la Fase 2 | 🟡 Mitigado en diseño |
 | R-05 | Renderizado lento con G-code extenso | UI inutilizable en trabajos reales | Batching con `drawRawPoints` + criterio de 60 fps con 200 k segmentos | 🟡 Mitigado en diseño |
@@ -895,8 +945,9 @@ Recuperación de la sesión: `git log --oneline --grep="S-17"`.
 ## 8. Próximos pasos (orden estricto)
 
 1. **Completar la verificación en banco**: 5.6 (reanudar sin repetir tramo), 5.7 (detener), §6 (divergencia de reanudación), reinicio del trabajo guardado (§11), CAM (§12) y robustez §7–§9.
-2. **Fase 5 — Optimización y empaquetado**: parseo de G-code en isolate (R-17), atajos de escritorio, builds Linux/macOS/Android y release de Windows.
-3. Push al remoto para ejecutar el CI (R-08).
+2. **Fase 5 — Optimización y empaquetado** (el APK y el release de Windows ya salen, S-18): parseo de G-code en isolate (R-17), atajos de escritorio, builds Linux/macOS, icono propio y `CHANGELOG.md` + licencia + `NOTICE` con la atribución GPLv3 de GRBL.
+3. Push al remoto para ejecutar el CI (R-08): el job de Android necesita `platforms;android-36` y el NDK, y el wrapper de Gradle ya está versionado.
+4. Instalar el APK en un móvil real (activando «Instalar por USB» en HyperOS) y comprobar arranque, SQLite y generación de CAM.
 
 
 
