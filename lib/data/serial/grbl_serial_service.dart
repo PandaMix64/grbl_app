@@ -1,8 +1,13 @@
 import 'dart:async';
 
 import '../../core/grbl/grbl_constants.dart';
+import '../../domain/entities/build_info.dart';
+import '../../domain/entities/grbl_handshake.dart';
+import '../../domain/entities/grbl_settings.dart';
 import '../../domain/entities/machine_state.dart';
+import '../../domain/entities/parser_state.dart';
 import '../../domain/entities/status_report.dart';
+import '../../domain/entities/work_offsets.dart';
 import '../../domain/repositories/serial_port_repository.dart';
 import 'character_counting_buffer.dart';
 
@@ -14,6 +19,25 @@ class GrblSafetyException implements Exception {
 
   @override
   String toString() => 'GrblSafetyException: $message';
+}
+
+/// Error de protocolo: GRBL respondió con `error:` o no respondió a una consulta.
+class GrblProtocolException implements Exception {
+  const GrblProtocolException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => 'GrblProtocolException: $message';
+}
+
+/// Consulta en curso (`$$`, `$G`, `$#`, `$I`) que acumula líneas hasta el `ok`.
+class _LineQuery {
+  _LineQuery({required this.accept});
+
+  final bool Function(String line) accept;
+  final List<String> lines = <String>[];
+  final Completer<List<String>> completer = Completer<List<String>>();
 }
 
 /// Servicio de comunicación con GRBL v1.1h.
@@ -51,6 +75,7 @@ class GrblSerialService {
   Timer? _pollTimer;
   StatusReport? _lastStatus;
   int _sentBlocks = 0;
+  _LineQuery? _query;
 
   /// Telemetría parseada; emite cada `<...>` recibido.
   Stream<StatusReport> get statusReports => _statusController.stream;
@@ -76,6 +101,10 @@ class GrblSerialService {
   bool get isConnected => _port.isOpen;
 
   /// Abre el puerto y empieza a escuchar respuestas.
+  ///
+  /// La suscripción se crea **antes** de abrir: GRBL imprime su banner al
+  /// recibir el reset del DTR y, si se escuchara después, ese primer mensaje se
+  /// perdería (los streams broadcast descartan eventos sin oyentes).
   Future<void> connect({
     required String portName,
     int baudRate = kDefaultBaudRate,
@@ -83,11 +112,17 @@ class GrblSerialService {
     if (isConnected) {
       throw const SerialPortException('El puerto ya está abierto.');
     }
-    await _port.open(portName: portName, baudRate: baudRate);
     _subscription = _port.lines.listen(
       _onLine,
       onError: (Object error) => _emitMessage('Puerto serial: $error'),
     );
+    try {
+      await _port.open(portName: portName, baudRate: baudRate);
+    } catch (_) {
+      await _subscription?.cancel();
+      _subscription = null;
+      rethrow;
+    }
   }
 
   /// Cierra el puerto y reinicia el control de flujo.
@@ -116,6 +151,9 @@ class GrblSerialService {
     _pollTimer?.cancel();
     _pollTimer = null;
   }
+
+  /// Detiene el sondeo periódico de estado.
+  void stopStatusPolling() => _stopStatusPolling();
 
   /// Encola un programa completo y empieza a enviarlo.
   void streamGcode(Iterable<String> blocks) {
@@ -153,12 +191,14 @@ class GrblSerialService {
 
     if (text == 'ok') {
       _buffer.acknowledgeOk();
+      _completeQuery();
       _pump();
       return;
     }
     if (text.startsWith('error')) {
       // Un error libera espacio igual que un ok; si no, el flujo se congela.
       _buffer.acknowledgeError();
+      _failQuery(text);
       _emitMessage(text);
       _pump();
       return;
@@ -181,8 +221,35 @@ class GrblSerialService {
       }
       return;
     }
+    final _LineQuery? query = _query;
+    if (query != null && query.accept(text)) {
+      query.lines.add(text);
+      return;
+    }
     if (text.startsWith('ALARM') || text.startsWith('[MSG:')) {
       _emitMessage(text);
+    }
+  }
+
+  void _completeQuery() {
+    final _LineQuery? query = _query;
+    if (query == null) {
+      return;
+    }
+    _query = null;
+    if (!query.completer.isCompleted) {
+      query.completer.complete(List<String>.of(query.lines));
+    }
+  }
+
+  void _failQuery(String reason) {
+    final _LineQuery? query = _query;
+    if (query == null) {
+      return;
+    }
+    _query = null;
+    if (!query.completer.isCompleted) {
+      query.completer.completeError(GrblProtocolException(reason));
     }
   }
 
@@ -196,6 +263,167 @@ class GrblSerialService {
     if (!isConnected) {
       throw const SerialPortException('No hay puerto abierto.');
     }
+  }
+
+  /// Puertos seriales disponibles en el sistema.
+  Future<List<SerialPortInfo>> listPorts() => _port.listPorts();
+
+  /// Tamaño actual del búfer de recepción usado para el control de flujo.
+  int get rxBufferSize => _buffer.bufferSize;
+
+  /// Aplica el tamaño de búfer detectado con `$I` (no asumir 128 B).
+  ///
+  /// Devuelve `true` si el tamaño cambió.
+  bool applyRxBufferSize(int bytes) {
+    final bool changed = _buffer.resize(bytes);
+    if (changed && !_buffer.isBusy) {
+      _emitMessage(
+        'Búfer RX detectado: $bytes B (presupuesto útil ${_buffer.budget} B).',
+      );
+    }
+    return changed;
+  }
+
+  /// Ejecuta una consulta de sistema (`$$`, `$G`, `$#`, `$I`) y acumula sus
+  /// líneas hasta el `ok` final.
+  Future<List<String>> _request(
+    String command, {
+    required bool Function(String line) accept,
+    Duration? timeout,
+  }) async {
+    _requireConnected();
+    if (state.isMoving) {
+      throw const GrblSafetyException(
+        'No se consultan parámetros con la máquina en movimiento.',
+      );
+    }
+    if (_query != null) {
+      throw const GrblProtocolException(
+        'Ya hay una consulta de parámetros en curso.',
+      );
+    }
+    final _LineQuery query = _LineQuery(accept: accept);
+    _query = query;
+    enqueue(command);
+    try {
+      return await query.completer.future.timeout(
+        timeout ?? _defaultTimeout,
+        onTimeout: () =>
+            throw GrblProtocolException('GRBL no respondió a "$command".'),
+      );
+    } finally {
+      if (identical(_query, query)) {
+        _query = null;
+      }
+    }
+  }
+
+  /// Lee la información de compilación (`$I`), incluido el tamaño real del
+  /// búfer RX. Devuelve `null` si el firmware no la expone.
+  Future<BuildInfo?> readBuildInfo({Duration? timeout}) async {
+    final List<String> lines = await _request(
+      r'$I',
+      accept: (String line) =>
+          line.startsWith('[VER:') || line.startsWith('[OPT:'),
+      timeout: timeout,
+    );
+    if (lines.isEmpty) {
+      return null;
+    }
+    try {
+      return BuildInfo.fromLines(lines);
+    } on FormatException catch (error) {
+      _emitMessage('Build info ilegible: ${error.message}');
+      return null;
+    }
+  }
+
+  /// Lee todos los parámetros `$x=valor` de la EEPROM (`$$`).
+  Future<GrblSettings> readSettings({Duration? timeout}) async {
+    final List<String> lines = await _request(
+      r'$$',
+      accept: (String line) => line.startsWith(r'$'),
+      timeout: timeout,
+    );
+    return GrblSettings.parse(lines.join('\n'));
+  }
+
+  /// Lee el estado modal del parser (`$G`).
+  Future<ParserState> readParserState({Duration? timeout}) async {
+    final List<String> lines = await _request(
+      r'$G',
+      accept: (String line) => line.startsWith('[GC:'),
+      timeout: timeout,
+    );
+    if (lines.isEmpty) {
+      throw const GrblProtocolException(
+        'GRBL no devolvió el estado del parser.',
+      );
+    }
+    return ParserState.parse(lines.first);
+  }
+
+  /// Lee los offsets de coordenadas (`$#`).
+  Future<WorkOffsets> readOffsets({Duration? timeout}) async {
+    final List<String> lines = await _request(
+      r'$#',
+      accept: (String line) =>
+          line.startsWith('[') && !line.startsWith('[MSG:'),
+      timeout: timeout,
+    );
+    return WorkOffsets.parse(lines);
+  }
+
+  /// Conecta y realiza el handshake completo: banner, `$I`, `$$`, `$G` y `$#`.
+  ///
+  /// Aplica el tamaño de búfer detectado antes de leer la EEPROM, de modo que
+  /// el streaming posterior use el presupuesto real del firmware. Si la lectura
+  /// de parámetros falla, cierra el puerto y propaga el error: operar con
+  /// suposiciones sobre la EEPROM es más peligroso que no conectar.
+  Future<GrblHandshake> connectAndIdentify({
+    required String portName,
+    int baudRate = kDefaultBaudRate,
+    Duration bannerTimeout = const Duration(seconds: 3),
+    Duration? requestTimeout,
+  }) async {
+    final Future<String> banner = banners.first.timeout(
+      bannerTimeout,
+      onTimeout: () => '',
+    );
+    await connect(portName: portName, baudRate: baudRate);
+    final String bannerLine = await banner;
+    startStatusPolling();
+
+    BuildInfo? build;
+    try {
+      build = await readBuildInfo(timeout: requestTimeout);
+    } on GrblProtocolException catch (error) {
+      _emitMessage('No se pudo leer \$I: ${error.message}');
+    }
+    if (build != null) {
+      applyRxBufferSize(build.rxBufferSize);
+    }
+
+    final GrblSettings settings;
+    final ParserState parserState;
+    final WorkOffsets offsets;
+    try {
+      settings = await readSettings(timeout: requestTimeout);
+      parserState = await readParserState(timeout: requestTimeout);
+      offsets = await readOffsets(timeout: requestTimeout);
+    } on GrblProtocolException {
+      await disconnect();
+      rethrow;
+    }
+
+    return GrblHandshake(
+      buildInfo: build,
+      rxBufferSize: _buffer.bufferSize,
+      settings: settings,
+      parserState: parserState,
+      offsets: offsets,
+      bannerReceived: bannerLine.isNotEmpty,
+    );
   }
 
   /// Secuencia de **pausa segura** (§3 de `docs/seguridad_operativa.md`).

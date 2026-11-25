@@ -34,16 +34,44 @@ class _InFlightLine {
 /// hardware (ver `docs/revision_tecnica_ruta_de_accion.md`, P1-4).
 class CharacterCountingBuffer {
   CharacterCountingBuffer({
-    this.bufferSize = kDefaultRxBufferSize,
+    int bufferSize = kDefaultRxBufferSize,
     this.reserve = kRxBufferReserve,
-  }) : assert(bufferSize > 0, 'El búfer debe ser positivo'),
+  }) : _bufferSize = bufferSize,
+       assert(bufferSize > 0, 'El búfer debe ser positivo'),
        assert(reserve >= 0 && reserve < bufferSize, 'Reserva inválida');
 
-  /// Tamaño del búfer de recepción de GRBL (`RX_BUFFER_SIZE`).
-  final int bufferSize;
+  int _bufferSize;
 
   /// Bytes que nunca se ofrecen, como margen de seguridad.
   final int reserve;
+
+  /// Tamaño del búfer de recepción de GRBL (`RX_BUFFER_SIZE`).
+  int get bufferSize => _bufferSize;
+
+  /// Cambia el tamaño del búfer tras detectarlo con `$I`.
+  ///
+  /// Solo se permite con el control vacío: redimensionar en mitad de un
+  /// streaming haría que las líneas ya encoladas no cupieran.
+  /// Devuelve `true` si el tamaño cambió.
+  bool resize(int newSize) {
+    if (newSize <= reserve) {
+      throw ArgumentError.value(
+        newSize,
+        'newSize',
+        'El búfer debe ser mayor que la reserva ($reserve B).',
+      );
+    }
+    if (newSize == _bufferSize) {
+      return false;
+    }
+    if (_bytesInFlight > 0 || _pending.isNotEmpty) {
+      throw StateError(
+        'No se puede redimensionar el búfer con trabajo pendiente.',
+      );
+    }
+    _bufferSize = newSize;
+    return true;
+  }
 
   final Queue<String> _pending = Queue<String>();
   final Queue<_InFlightLine> _inFlight = Queue<_InFlightLine>();

@@ -30,6 +30,54 @@ class FakeSerialPort implements SerialPortRepository {
   /// Avance reportado.
   double feed = 800;
 
+  /// Respuesta de `$I`. Vacía para simular un firmware sin build info.
+  List<String> buildInfoLines = <String>[
+    '[VER:1.1h.20190825:]',
+    '[OPT:V,15,128]',
+  ];
+
+  /// Respuesta de `$$`.
+  List<String> settingsLines = <String>[
+    r'$0=10',
+    r'$1=25',
+    r'$10=1',
+    r'$20=1',
+    r'$21=0',
+    r'$22=1',
+    r'$30=1000.000',
+    r'$32=1',
+    r'$100=250.000',
+    r'$101=250.000',
+    r'$102=400.000',
+    r'$110=500.000',
+    r'$111=500.000',
+    r'$112=200.000',
+    r'$120=10.000',
+    r'$121=10.000',
+    r'$122=10.000',
+    r'$130=300.000',
+    r'$131=180.000',
+    r'$132=45.000',
+  ];
+
+  /// Respuesta de `$G`.
+  String parserStateLine = r'[GC:G0 G54 G17 G21 G90 G94 M5 M9 T0 F0 S0]';
+
+  /// Respuesta de `$#`.
+  List<String> offsetLines = <String>[
+    '[G54:0.000,0.000,0.000]',
+    '[G55:0.000,0.000,0.000]',
+    '[G56:0.000,0.000,0.000]',
+    '[G57:0.000,0.000,0.000]',
+    '[G58:0.000,0.000,0.000]',
+    '[G59:0.000,0.000,0.000]',
+    '[G28:0.000,0.000,0.000]',
+    '[G30:0.000,0.000,0.000]',
+    '[G92:0.000,0.000,0.000]',
+    '[TLO:0.000]',
+    '[PRB:0.000,0.000,0.000:0]',
+  ];
+
   /// Si es `true`, cada línea recibe su `ok` (como GRBL en `Idle`).
   set autoAck(bool value) => _autoAck = value;
 
@@ -72,6 +120,9 @@ class FakeSerialPort implements SerialPortRepository {
     if (_unackedBytes > bufferSize) {
       overflowDetected = true;
     }
+    for (final String response in _responsesFor(line)) {
+      emitLine(response);
+    }
     if (_autoAck) {
       scheduleMicrotask(() {
         _unackedBytes -= bytes;
@@ -80,6 +131,28 @@ class FakeSerialPort implements SerialPortRepository {
         }
         emitLine('ok');
       });
+    }
+  }
+
+  /// Respuestas emuladas de los comandos de sistema de GRBL.
+  List<String> _responsesFor(String line) {
+    switch (line) {
+      case r'$I':
+        return buildInfoLines;
+      case r'$$':
+        return settingsLines;
+      case r'$G':
+        return <String>[parserStateLine];
+      case r'$#':
+        return offsetLines;
+      case r'$X':
+        state = 'Idle';
+        return const <String>[];
+      case r'$H':
+        state = 'Idle';
+        return const <String>[];
+      default:
+        return const <String>[];
     }
   }
 

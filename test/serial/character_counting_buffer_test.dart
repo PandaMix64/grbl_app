@@ -106,6 +106,21 @@ void main() {
       expect(buffer.bytesInFlight, 0);
     });
 
+    test('resize ajusta el presupuesto solo con el control vacío', () {
+      final CharacterCountingBuffer buffer = CharacterCountingBuffer();
+      expect(buffer.budget, 127);
+
+      expect(buffer.resize(256), isTrue);
+      expect(buffer.bufferSize, 256);
+      expect(buffer.budget, 255);
+      expect(buffer.resize(256), isFalse);
+      expect(() => buffer.resize(0), throwsArgumentError);
+
+      buffer.enqueue('G21');
+      buffer.drainSendable();
+      expect(() => buffer.resize(128), throwsStateError);
+    });
+
     test('la constante documentada del búfer es 128 B', () {
       expect(kDefaultRxBufferSize, 128);
       expect(CharacterCountingBuffer().budget, 127);
