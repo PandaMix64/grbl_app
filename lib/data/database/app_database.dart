@@ -5,6 +5,7 @@ import 'package:drift_flutter/drift_flutter.dart';
 
 import '../../domain/entities/machine_profile.dart';
 import '../../domain/entities/project_file.dart';
+import '../../domain/entities/work_offsets.dart';
 
 part 'app_database.g.dart';
 
@@ -51,6 +52,9 @@ class Projects extends Table {
   RealColumn get resumeSpindleSpeed => real().nullable()();
   DateTimeColumn get resumeSavedAt => dateTime().nullable()();
 
+  /// Offsets `$#` serializados como JSON (G54–G59, G92, TLO...).
+  TextColumn get resumeOffsets => text().nullable()();
+
   DateTimeColumn get updatedAt => dateTime()();
 
   @override
@@ -77,11 +81,18 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
 
   @override
-  MigrationStrategy get migration =>
-      MigrationStrategy(onCreate: (Migrator m) => m.createAll());
+  MigrationStrategy get migration => MigrationStrategy(
+    onCreate: (Migrator m) => m.createAll(),
+    onUpgrade: (Migrator m, int from, int to) async {
+      if (from < 2) {
+        // v2: offsets de coordenadas en el punto de reanudación (SEG-05).
+        await m.addColumn(projects, projects.resumeOffsets);
+      }
+    },
+  );
 
   // ---------------------------------------------------------------- perfiles
 
@@ -174,6 +185,11 @@ class AppDatabase extends _$AppDatabase {
         resumeFeedMmMin: Value(resume?.feedMmMin),
         resumeSpindleSpeed: Value(resume?.spindleSpeed),
         resumeSavedAt: Value(resume?.savedAt),
+        resumeOffsets: Value(
+          resume?.offsets == null
+              ? null
+              : jsonEncode(resume!.offsets!.toJson()),
+        ),
       ),
     );
   }
@@ -231,6 +247,9 @@ class AppDatabase extends _$AppDatabase {
         resumeFeedMmMin: Value(resume.feedMmMin),
         resumeSpindleSpeed: Value(resume.spindleSpeed),
         resumeSavedAt: Value(resume.savedAt),
+        resumeOffsets: Value(
+          resume.offsets == null ? null : jsonEncode(resume.offsets!.toJson()),
+        ),
         updatedAt: Value(resume.savedAt),
       ),
     );
@@ -302,7 +321,23 @@ extension ProjectRowMapper on ProjectRow {
       feedMmMin: resumeFeedMmMin,
       spindleSpeed: resumeSpindleSpeed,
       savedAt: resumeSavedAt ?? updatedAt,
+      offsets: _decodeOffsets(resumeOffsets),
     );
+  }
+
+  static WorkOffsets? _decodeOffsets(String? raw) {
+    if (raw == null || raw.isEmpty) {
+      return null;
+    }
+    try {
+      final Object? decoded = jsonDecode(raw);
+      if (decoded is Map<String, Object?>) {
+        return WorkOffsets.fromJson(decoded);
+      }
+    } on FormatException {
+      return null;
+    }
+    return null;
   }
 
   static List<double> _decodePosition(String? raw) {

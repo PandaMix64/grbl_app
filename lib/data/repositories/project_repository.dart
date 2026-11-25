@@ -39,6 +39,7 @@ class ProjectRepository {
       feedMmMin: modal?.feed ?? request.status?.feedMmMin,
       spindleSpeed: modal?.spindle ?? request.status?.spindleSpeed,
       savedAt: DateTime.now(),
+      offsets: request.offsets,
     );
 
     await _db.saveResume(projectId: projectId, resume: resume);

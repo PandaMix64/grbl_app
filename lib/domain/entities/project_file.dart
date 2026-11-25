@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+import 'work_offsets.dart';
+
 /// Estado de ejecución de un proyecto (se muestra en el historial).
 enum ProjectStatus {
   ready,
@@ -40,6 +42,7 @@ class ResumeState {
     required this.savedAt,
     this.feedMmMin,
     this.spindleSpeed,
+    this.offsets,
   });
 
   /// Índice (base 0) de la siguiente línea a ejecutar.
@@ -58,6 +61,12 @@ class ResumeState {
   final double? spindleSpeed;
   final DateTime savedAt;
 
+  /// Offsets de coordenadas (`$#`) en el momento de la pausa.
+  ///
+  /// Se comparan al reanudar: si `G54`/`G92`/`TLO` han cambiado, continuar
+  /// movería la pieza a otro sitio (SEG-05).
+  final WorkOffsets? offsets;
+
   Map<String, Object?> toJson() => <String, Object?>{
     'lineIndex': lineIndex,
     'parserState': parserState,
@@ -66,6 +75,7 @@ class ResumeState {
     'feedMmMin': feedMmMin,
     'spindleSpeed': spindleSpeed,
     'savedAt': savedAt.toIso8601String(),
+    if (offsets != null) 'offsets': offsets!.toJson(),
   };
 
   factory ResumeState.fromJson(Map<String, Object?> json) {
@@ -92,6 +102,9 @@ class ResumeState {
           : null,
       savedAt:
           DateTime.tryParse(json['savedAt'] as String? ?? '') ?? DateTime.now(),
+      offsets: json['offsets'] is Map<String, Object?>
+          ? WorkOffsets.fromJson(json['offsets']! as Map<String, Object?>)
+          : null,
     );
   }
 }

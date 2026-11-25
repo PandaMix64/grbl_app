@@ -905,6 +905,17 @@ class $ProjectsTable extends Projects
         type: DriftSqlType.dateTime,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _resumeOffsetsMeta = const VerificationMeta(
+    'resumeOffsets',
+  );
+  @override
+  late final GeneratedColumn<String> resumeOffsets = GeneratedColumn<String>(
+    'resume_offsets',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -931,6 +942,7 @@ class $ProjectsTable extends Projects
     resumeFeedMmMin,
     resumeSpindleSpeed,
     resumeSavedAt,
+    resumeOffsets,
     updatedAt,
   ];
   @override
@@ -1054,6 +1066,15 @@ class $ProjectsTable extends Projects
         ),
       );
     }
+    if (data.containsKey('resume_offsets')) {
+      context.handle(
+        _resumeOffsetsMeta,
+        resumeOffsets.isAcceptableOrUnknown(
+          data['resume_offsets']!,
+          _resumeOffsetsMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -1123,6 +1144,10 @@ class $ProjectsTable extends Projects
         DriftSqlType.dateTime,
         data['${effectivePrefix}resume_saved_at'],
       ),
+      resumeOffsets: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}resume_offsets'],
+      ),
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
@@ -1154,6 +1179,9 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
   final double? resumeFeedMmMin;
   final double? resumeSpindleSpeed;
   final DateTime? resumeSavedAt;
+
+  /// Offsets `$#` serializados como JSON (G54–G59, G92, TLO...).
+  final String? resumeOffsets;
   final DateTime updatedAt;
   const ProjectRow({
     required this.id,
@@ -1169,6 +1197,7 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
     this.resumeFeedMmMin,
     this.resumeSpindleSpeed,
     this.resumeSavedAt,
+    this.resumeOffsets,
     required this.updatedAt,
   });
   @override
@@ -1200,6 +1229,9 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
     }
     if (!nullToAbsent || resumeSavedAt != null) {
       map['resume_saved_at'] = Variable<DateTime>(resumeSavedAt);
+    }
+    if (!nullToAbsent || resumeOffsets != null) {
+      map['resume_offsets'] = Variable<String>(resumeOffsets);
     }
     map['updated_at'] = Variable<DateTime>(updatedAt);
     return map;
@@ -1234,6 +1266,9 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
       resumeSavedAt: resumeSavedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(resumeSavedAt),
+      resumeOffsets: resumeOffsets == null && nullToAbsent
+          ? const Value.absent()
+          : Value(resumeOffsets),
       updatedAt: Value(updatedAt),
     );
   }
@@ -1263,6 +1298,7 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
         json['resumeSpindleSpeed'],
       ),
       resumeSavedAt: serializer.fromJson<DateTime?>(json['resumeSavedAt']),
+      resumeOffsets: serializer.fromJson<String?>(json['resumeOffsets']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
   }
@@ -1283,6 +1319,7 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
       'resumeFeedMmMin': serializer.toJson<double?>(resumeFeedMmMin),
       'resumeSpindleSpeed': serializer.toJson<double?>(resumeSpindleSpeed),
       'resumeSavedAt': serializer.toJson<DateTime?>(resumeSavedAt),
+      'resumeOffsets': serializer.toJson<String?>(resumeOffsets),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
   }
@@ -1301,6 +1338,7 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
     Value<double?> resumeFeedMmMin = const Value.absent(),
     Value<double?> resumeSpindleSpeed = const Value.absent(),
     Value<DateTime?> resumeSavedAt = const Value.absent(),
+    Value<String?> resumeOffsets = const Value.absent(),
     DateTime? updatedAt,
   }) => ProjectRow(
     id: id ?? this.id,
@@ -1330,6 +1368,9 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
     resumeSavedAt: resumeSavedAt.present
         ? resumeSavedAt.value
         : this.resumeSavedAt,
+    resumeOffsets: resumeOffsets.present
+        ? resumeOffsets.value
+        : this.resumeOffsets,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   ProjectRow copyWithCompanion(ProjectsCompanion data) {
@@ -1363,6 +1404,9 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
       resumeSavedAt: data.resumeSavedAt.present
           ? data.resumeSavedAt.value
           : this.resumeSavedAt,
+      resumeOffsets: data.resumeOffsets.present
+          ? data.resumeOffsets.value
+          : this.resumeOffsets,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -1383,6 +1427,7 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
           ..write('resumeFeedMmMin: $resumeFeedMmMin, ')
           ..write('resumeSpindleSpeed: $resumeSpindleSpeed, ')
           ..write('resumeSavedAt: $resumeSavedAt, ')
+          ..write('resumeOffsets: $resumeOffsets, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
@@ -1403,6 +1448,7 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
     resumeFeedMmMin,
     resumeSpindleSpeed,
     resumeSavedAt,
+    resumeOffsets,
     updatedAt,
   );
   @override
@@ -1422,6 +1468,7 @@ class ProjectRow extends DataClass implements Insertable<ProjectRow> {
           other.resumeFeedMmMin == this.resumeFeedMmMin &&
           other.resumeSpindleSpeed == this.resumeSpindleSpeed &&
           other.resumeSavedAt == this.resumeSavedAt &&
+          other.resumeOffsets == this.resumeOffsets &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -1439,6 +1486,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectRow> {
   final Value<double?> resumeFeedMmMin;
   final Value<double?> resumeSpindleSpeed;
   final Value<DateTime?> resumeSavedAt;
+  final Value<String?> resumeOffsets;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const ProjectsCompanion({
@@ -1455,6 +1503,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectRow> {
     this.resumeFeedMmMin = const Value.absent(),
     this.resumeSpindleSpeed = const Value.absent(),
     this.resumeSavedAt = const Value.absent(),
+    this.resumeOffsets = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -1472,6 +1521,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectRow> {
     this.resumeFeedMmMin = const Value.absent(),
     this.resumeSpindleSpeed = const Value.absent(),
     this.resumeSavedAt = const Value.absent(),
+    this.resumeOffsets = const Value.absent(),
     required DateTime updatedAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -1494,6 +1544,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectRow> {
     Expression<double>? resumeFeedMmMin,
     Expression<double>? resumeSpindleSpeed,
     Expression<DateTime>? resumeSavedAt,
+    Expression<String>? resumeOffsets,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
   }) {
@@ -1513,6 +1564,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectRow> {
       if (resumeSpindleSpeed != null)
         'resume_spindle_speed': resumeSpindleSpeed,
       if (resumeSavedAt != null) 'resume_saved_at': resumeSavedAt,
+      if (resumeOffsets != null) 'resume_offsets': resumeOffsets,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -1532,6 +1584,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectRow> {
     Value<double?>? resumeFeedMmMin,
     Value<double?>? resumeSpindleSpeed,
     Value<DateTime?>? resumeSavedAt,
+    Value<String?>? resumeOffsets,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
   }) {
@@ -1549,6 +1602,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectRow> {
       resumeFeedMmMin: resumeFeedMmMin ?? this.resumeFeedMmMin,
       resumeSpindleSpeed: resumeSpindleSpeed ?? this.resumeSpindleSpeed,
       resumeSavedAt: resumeSavedAt ?? this.resumeSavedAt,
+      resumeOffsets: resumeOffsets ?? this.resumeOffsets,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -1596,6 +1650,9 @@ class ProjectsCompanion extends UpdateCompanion<ProjectRow> {
     if (resumeSavedAt.present) {
       map['resume_saved_at'] = Variable<DateTime>(resumeSavedAt.value);
     }
+    if (resumeOffsets.present) {
+      map['resume_offsets'] = Variable<String>(resumeOffsets.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
@@ -1621,6 +1678,7 @@ class ProjectsCompanion extends UpdateCompanion<ProjectRow> {
           ..write('resumeFeedMmMin: $resumeFeedMmMin, ')
           ..write('resumeSpindleSpeed: $resumeSpindleSpeed, ')
           ..write('resumeSavedAt: $resumeSavedAt, ')
+          ..write('resumeOffsets: $resumeOffsets, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -2248,6 +2306,7 @@ typedef $$ProjectsTableCreateCompanionBuilder = ProjectsCompanion Function({
   Value<double?> resumeFeedMmMin,
   Value<double?> resumeSpindleSpeed,
   Value<DateTime?> resumeSavedAt,
+  Value<String?> resumeOffsets,
   required DateTime updatedAt,
   Value<int> rowid,
 });
@@ -2265,6 +2324,7 @@ typedef $$ProjectsTableUpdateCompanionBuilder = ProjectsCompanion Function({
   Value<double?> resumeFeedMmMin,
   Value<double?> resumeSpindleSpeed,
   Value<DateTime?> resumeSavedAt,
+  Value<String?> resumeOffsets,
   Value<DateTime> updatedAt,
   Value<int> rowid,
 });
@@ -2340,6 +2400,11 @@ class $$ProjectsTableFilterComposer
 
   ColumnFilters<DateTime> get resumeSavedAt => $composableBuilder(
     column: $table.resumeSavedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get resumeOffsets => $composableBuilder(
+    column: $table.resumeOffsets,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2423,6 +2488,11 @@ class $$ProjectsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get resumeOffsets => $composableBuilder(
+    column: $table.resumeOffsets,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -2493,6 +2563,11 @@ class $$ProjectsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get resumeOffsets => $composableBuilder(
+    column: $table.resumeOffsets,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
 }
@@ -2541,6 +2616,7 @@ class $$ProjectsTableTableManager
                 Value<double?> resumeFeedMmMin = const Value.absent(),
                 Value<double?> resumeSpindleSpeed = const Value.absent(),
                 Value<DateTime?> resumeSavedAt = const Value.absent(),
+                Value<String?> resumeOffsets = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ProjectsCompanion(
@@ -2557,6 +2633,7 @@ class $$ProjectsTableTableManager
                 resumeFeedMmMin: resumeFeedMmMin,
                 resumeSpindleSpeed: resumeSpindleSpeed,
                 resumeSavedAt: resumeSavedAt,
+                resumeOffsets: resumeOffsets,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -2575,6 +2652,7 @@ class $$ProjectsTableTableManager
                 Value<double?> resumeFeedMmMin = const Value.absent(),
                 Value<double?> resumeSpindleSpeed = const Value.absent(),
                 Value<DateTime?> resumeSavedAt = const Value.absent(),
+                Value<String?> resumeOffsets = const Value.absent(),
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => ProjectsCompanion.insert(
@@ -2591,6 +2669,7 @@ class $$ProjectsTableTableManager
                 resumeFeedMmMin: resumeFeedMmMin,
                 resumeSpindleSpeed: resumeSpindleSpeed,
                 resumeSavedAt: resumeSavedAt,
+                resumeOffsets: resumeOffsets,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
