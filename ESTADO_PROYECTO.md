@@ -435,6 +435,8 @@ Recuperación de la sesión: `git log --oneline --grep="S-07"`.
 | `ffd603b` | `feat(persistencia): guarda los offsets del punto de reanudacion` |
 | `970ac8f` | `feat(viewer): ejecuta el programa con holgura y progreso real` |
 | `7c6abd6` | `test: cubre ejecucion, pausa con persistencia y reanudacion verificada` |
+| `9045dde` | `docs: cierra M3.2 con la guia de prueba en banco` |
+| `a3cf101` | `docs: anota el build de escritorio verificado antes de la prueba en banco` |
 
 Recuperación de la sesión: `git log --oneline --grep="S-08"`.
 
