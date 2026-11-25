@@ -159,6 +159,25 @@ class GrblSettings {
     return value.toStringAsFixed(3);
   }
 
+  /// Serializa los parámetros como `{código: valor}` para cruzar isolates o
+  /// guardarse en un perfil.
+  Map<String, Object?> toJson() => <String, Object?>{
+    for (final MapEntry<int, String> entry in _values.entries)
+      entry.key.toString(): entry.value,
+  };
+
+  factory GrblSettings.fromJson(Map<String, Object?> json) {
+    final Map<int, String> values = <int, String>{};
+    for (final MapEntry<String, Object?> entry in json.entries) {
+      final int? code = int.tryParse(entry.key);
+      final Object? value = entry.value;
+      if (code != null && value is String) {
+        values[code] = value;
+      }
+    }
+    return GrblSettings._(values);
+  }
+
   @override
   String toString() => 'GrblSettings(${codes.length} parámetros)';
 }
