@@ -12,7 +12,7 @@ Flutter + Material Design 3, Clean Architecture con gestión de estado reactiva,
 | :--- | :--- |
 | Fase 0 — Fundaciones | ✅ Cerrada |
 | Fase 1 — Núcleo y Serial | ✅ Cerrada |
-| Fase 2 — Calibración | 🟡 Siguiente |
+| Fase 2 — Calibración | 🟡 En curso (jog, parámetros, pasos/mm y perfiles) |
 | Fase 3 — Visor 3D | ⬜ Pendiente |
 | Fase 4 — Generador CAM | ⬜ Pendiente |
 | Fase 5 — Optimización y empaquetado | ⬜ Pendiente |
@@ -72,12 +72,13 @@ lib/
     repositories/  # ProjectRepository: persistir y confirmar antes del reset
   features/
     connection/ # controlador y barra de conexión
-    home/ calibration/ viewer/ cam/
+    calibration/ # jog, parámetros $, pasos/mm y perfiles
+    home/ viewer/ cam/
 test/
-  domain/       # protocolo, perfiles, proyectos, consistencia
-  serial/       # presupuesto de 128 B, seguridad, handshake y worker
+  domain/       # protocolo, perfiles, proyectos, consistencia, jog y pasos/mm
+  serial/       # presupuesto de 128 B, seguridad, handshake, jog y escritura
   data/         # base de datos real y persistencia del punto de reanudación
-  features/     # controlador de conexión
+  features/     # controladores de conexión y calibración
   helpers/      # FakeSerialPort: emulador GRBL de pruebas
 ```
 
@@ -101,6 +102,15 @@ await client.pause();
 `connect()` ejecuta el handshake completo: banner, `$I` (de donde sale el **tamaño real** del búfer RX), `$$`, `$G` y `$#`. `stopJob()` emite un `WorkerPersistRequest`: hasta que no se llame `confirmPersisted()` no se envía el soft reset (SEG-03).
 
 > **Nota de entorno:** `flutter_libserialport` despliega la biblioteca nativa mediante CMake en el *bundle* de la aplicación. Por eso `flutter test` no puede cargarla: la prueba de humo FFI se salta y la verificación real se hace con `flutter run -d windows` (ver R-10 en `ESTADO_PROYECTO.md`).
+
+## Calibración
+
+El módulo de Calibración permite:
+
+- **Jogging** con `$J=` (el avance `F` es obligatorio en cada comando) y cancelación con `0x85`; solo se acepta en `Idle`/`Jog`.
+- **Parámetros `$`**: lectura de la EEPROM y escritura **solo de los valores que cambian** (`GrblSettings.diff`), con un `ok` por parámetro.
+- **Pasos/mm**: se ordena un avance de 10 mm, se mide el desplazamiento real y la app calcula y escribe `nuevo = actual × 10 / medido` (rechaza medidas fuera del ±50 %).
+- **Perfiles**: alta, edición y borrado con validación de volumen, altura segura, holgura y herramienta.
 
 ## Persistencia
 

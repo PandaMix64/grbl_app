@@ -9,11 +9,11 @@
 | :--- | :--- |
 | Proyecto | `grbl_app` — entorno CNC con Flutter + GRBL v1.1h |
 | Repositorio | Git local, rama `main` (inicializado 2026-11-24) |
-| Sesión actual | **S-04 (cerrada)** |
-| Fase actual | **Fase 1 cerrada · siguiente: Fase 2 (Calibración)** |
-| Avance global estimado | ~60 % |
-| Bloqueos | La prueba en banco queda pospuesta por decisión del usuario hasta completar la UI |
-| Siguiente hito | **M2.1** — jogging (`$J=` + `0x85`) y lectura/escritura de parámetros `$` desde la UI |
+| Sesión actual | **S-05 (cerrada)** |
+| Fase actual | **Fase 2 — Calibración (en curso)** |
+| Avance global estimado | ~68 % |
+| Bloqueos | Ninguno. Prueba en banco pospuesta (R-10) |
+| Siguiente hito | **M2.2** — compensación de holgura con movimiento real + perfiles aplicados a la ejecución |
 
 ---
 
@@ -32,7 +32,7 @@
 | :--- | :--- | :--- | :--- |
 | **Fase 0: Fundaciones** | Repo, entorno, contratos de dominio, fachada serial, política de seguridad | 🟢 **Cerrada salvo licencia y CHANGELOG** | Añadida por la revisión técnica; M0.1–M0.3 entregados en S-02 |
 | **Fase 1: Núcleo y Serial** | Clean Architecture, esquema SQLite, navegación M3, isolate serial con *character-counting* | ✅ **Cerrada** | Conexión, handshake, worker, Drift, providers y barra de conexión entregados |
-| **Fase 2: Calibración** | Jogging, pasos/mm, parámetros `$`, perfiles y *backlash* | ⬜ Pendiente | *Backlash* según P0-2 (sin `G92`) |
+| **Fase 2: Calibración** | Jogging, pasos/mm, parámetros `$`, perfiles y *backlash* | 🟡 **En curso (~45 %)** | Jogging, parámetros, pasos/mm y CRUD de perfiles entregados; falta *backlash* y aplicar perfiles |
 | **Fase 3: Visor 3D** | Renderizado, interpretación de G-code, pausa/detención y reanudación segura | ⬜ Pendiente | `ResumeState` y `MotionSegment` ya existen; falta persistencia y render |
 | **Fase 4: Generador CAM** | Imagen → G-code (vectorización, dithering, relieve 2.5D) | ⬜ Pendiente | Modo láser requiere `$32` (P1-1) |
 | **Fase 5: Optimización y Empaquetado** | Rendimiento, atajos, builds Windows/Linux/macOS/Android | ⬜ Pendiente | — |
@@ -84,11 +84,17 @@ Leyenda: 🟡 en curso · ✅ cerrada · ⬜ pendiente · 🔴 bloqueada
 - [x] Barra de conexión: puerto, baudios, estado y avisos de `ProfileConsistency`
 - [x] Persistencia del punto de reanudación al confirmar `WorkerPersistRequest` (R-12 cerrado)
 
-### M2.1 Calibración — siguiente
-- [ ] Jogging con `$J=` (F obligatorio) y cancelación con `0x85` al soltar
-- [ ] Lectura/escritura de parámetros `$` con `GrblSettings.diff` (sin desgastar EEPROM)
-- [ ] Calibración de pasos/mm guiada (avance teórico vs. medido)
-- [ ] CRUD de perfiles de máquina sobre Drift
+### M2.1 Calibración (cerrada en S-05)
+- [x] Jogging con `$J=` (F obligatorio) y cancelación con `0x85` al soltar
+- [x] Lectura/escritura de parámetros `$` con `GrblSettings.diff` (sin desgastar EEPROM)
+- [x] Calibración de pasos/mm guiada (avance teórico vs. medido)
+- [x] CRUD de perfiles de máquina sobre Drift
+
+### M2.2 Compensación y aplicación de perfiles — siguiente
+- [ ] Post-procesador de *backlash* con movimiento real (nunca `G92`, ver P0-2)
+- [ ] Prueba guiada de holgura por eje (avanzar/retroceder 5 mm y medir)
+- [ ] Aplicar el perfil activo a la conexión (comparar con la EEPROM al conectar)
+- [ ] Homing (`$H`) y definición de origen de trabajo desde la UI
 
 ---
 
@@ -254,6 +260,37 @@ Recuperación de la sesión: `git log --oneline --grep="S-04"`.
 
 ---
 
+### S-05 — 2026-11-24 · Calibración: jogging, parámetros y pasos/mm (M2.1)
+
+**Alcance:** M2.1 completo: comandos de jog, lectura/escritura de `$` por diferencias, calibración de pasos/mm guiada, CRUD de perfiles y toda la UI del módulo.
+
+**Entregado**
+
+| # | Cambio | Archivo(s) | Estado |
+| :--- | :--- | :--- | :--- |
+| 1 | `JogCommand` con validación (`F` obligatorio) y modos relativo/absoluto de máquina | `lib/domain/entities/jog_command.dart` | ✅ |
+| 2 | `StepsPerMmCalibration` con rechazo de medidas fuera del ±50 % | `lib/domain/services/steps_per_mm_calibration.dart` | ✅ |
+| 3 | `jog()` con guardia `Idle`/`Jog` y `writeSettings()` con `diff` y `ok` por parámetro | `lib/data/serial/grbl_serial_service.dart` | ✅ |
+| 4 | Comandos `jog` y `writeSettings` en el worker y en el cliente | `lib/data/serial/grbl_worker*.dart` | ✅ |
+| 5 | `CalibrationController` (perfiles, EEPROM, pasos/mm, jog) | `lib/features/calibration/calibration_controller.dart` | ✅ |
+| 6 | UI: jog, parámetros, pasos/mm, perfiles y formulario de perfil | `lib/features/calibration/widgets/`, `calibration_page.dart` | ✅ |
+| 7 | 26 pruebas nuevas (124 en total, 1 saltada) | `test/domain/`, `test/serial/`, `test/features/`, `test/widget_test.dart` | ✅ |
+
+**Verificaciones ejecutadas:** `flutter analyze` → *No issues found* · `flutter test` → **124 en verde, 1 saltada** · `dart format` → 0 cambios.
+
+**Bugs reales corregidos en la sesión**
+
+1. **El jog se rechazaba al conectar**: `connectAndIdentify` devolvía el handshake antes de recibir la primera telemetría, así que `state` era `unknown` y la guardia `Idle/Jog` lo bloqueaba. Ahora espera hasta 2 s el primer status report (ADR-018).
+2. **`copyWith` no podía limpiar el perfil seleccionado**: el `??` mantenía el valor anterior al borrar el último perfil. Añadido `clearSelectedProfile`.
+3. **`Axis` colisionaba con el `Axis` de Flutter**: renombrado a `MachineAxis` (ADR-017). El primer reemplazo automático se hizo sin distinguir mayúsculas y hubo que corregir identificadores a mano — lección registrada.
+4. **Overflow de 21 px** en la cabecera del panel de jog a 800 px de ancho: título con `Expanded` y `ellipsis`.
+
+**Decisiones tomadas:** ADR-017, ADR-018.
+
+**Abierto al cierre:** compensación de holgura con movimiento real, aplicación automática del perfil y homing (M2.2); prueba en banco (R-10).
+
+---
+
 ## 5. Decisiones de arquitectura (ADR resumidas)
 
 | ID | Decisión | Motivo | Consecuencia |
@@ -274,6 +311,8 @@ Recuperación de la sesión: `git log --oneline --grep="S-04"`.
 | ADR-014 | Las pruebas que requieren la biblioteca nativa se saltan fuera de un build de la app | CMake despliega `serialport.dll` solo en el bundle | La verificación FFI se hace con `flutter run -d windows` + hardware (R-10) |
 | ADR-015 | El código generado por drift (`app_database.g.dart`) se versiona | CI y clones nuevos compilan sin ejecutar `build_runner` | Si se cambia el esquema hay que regenerar y commitear en el mismo cambio |
 | ADR-016 | Providers escritos a mano (`Provider`/`NotifierProvider`), sin `@riverpod` todavía | La superficie de estado es pequeña y se lee mejor explícita; `riverpod_generator` queda disponible para features grandes | Si el número de providers crece, migrar a codegen en un cambio dedicado |
+| ADR-017 | El enum de ejes se llama `MachineAxis`, no `Axis` | `Axis` colisiona con el `Axis` de Flutter en cualquier archivo que importe la UI | Los widgets usan `MachineAxis` sin `hide`; los parámetros se siguen llamando `axis` |
+| ADR-018 | `connectAndIdentify` espera la primera telemetría (≤ 2 s) antes de devolver | Sin estado real, el jog y las consultas se rechazaban justo tras conectar | Si no llega telemetría se conecta igual, pero la UI lo verá en `unknown` |
 
 ---
 
@@ -305,18 +344,21 @@ Recuperación de la sesión: `git log --oneline --grep="S-04"`.
 | R-11 | Sin reconexión automática tras una pérdida de USB | Trabajo interrumpido y estado perdido | Detectar error de puerto, marcar `Disconnected` y exigir reconexión con handshake | 🟡 Vigilado |
 | R-12 | La persistencia (Drift) aún no existe: `persistProgress` solo puede confirmar de memoria | El ack de SEG-03 no garantiza durabilidad todavía | Cerrado en S-04: `ProjectRepository.persistAndConfirm` escribe en SQLite antes de confirmar | ✅ Cerrado |
 | R-13 | La conexión desde la UI se cubre en tests de controlador, no con un widget test que pulse «Conectar» | Un fallo de cableado UI ↔ controlador no se detectaría en CI | Prueba E2E en build con hardware (R-10) y revisión manual al integrar la Fase 2 | 🟡 Vigilado |
+| R-14 | El jog es por pasos discretos: no hay modo continuo al mantener pulsado | Posicionamiento fino incómodo en recorridos largos | Implementar el bucle incremental `s = v·dt` de `jogging.md` cuando la UI esté estable | 🟡 Vigilado |
+| R-15 | El perfil activo aún no se aplica a la conexión ni al post-procesado | Cambios de perfil no afectan a la ejecución | M2.2: comparar perfil ↔ EEPROM al conectar y usar el perfil en el post-procesador | 🔴 Abierto |
 
 ---
 
 ## 8. Próximos pasos (orden estricto)
 
-1. **M2.1 — Jogging**: comandos `$J=` con `F` obligatorio y cancelación `0x85` al soltar, con validación de estado `Idle`/`Jog` y bloqueo si el perfil no está cargado.
-2. Lectura/escritura de parámetros `$` desde la UI usando `GrblSettings.diff` (solo lo que cambia) y confirmación explícita antes de escribir EEPROM.
-3. CRUD de perfiles sobre Drift (`allProfiles`, `upsertProfile`, `deleteProfile`) con validación de `MachineProfile.validate()`.
-4. Calibración de pasos/mm guiada: avance teórico, captura de la medida real y recálculo con la fórmula de §3.2 del documento.
-5. Prueba de humo en build de escritorio cuando la UI esté completa (R-10): enumerar, conectar, handshake, pausa con herramienta apagada.
+1. **Post-procesador de holgura**: inyectar micro-movimientos reales al cambiar de sentido (nunca `G92`, P0-2) y cubrirlo con un test de geometría.
+2. **Prueba guiada de holgura** por eje en la UI: avanzar/retroceder 5 mm, capturar la medida y guardarla en el perfil.
+3. **Aplicar el perfil a la conexión**: al conectar, comparar `$130-$132`, `$32` y pasos/mm con el perfil activo y ofrecer corregir.
+4. **Homing y origen** desde la UI (`$H`, `G10 L20`, `G92` desaconsejado): definir cero de trabajo con confirmación.
+5. Prueba de humo en build de escritorio cuando la UI esté completa (R-10).
 6. `CHANGELOG.md`, licencia y `NOTICE` con la atribución GPLv3 de GRBL.
 7. Push al remoto para ejecutar el CI (R-08).
+
 
 
 

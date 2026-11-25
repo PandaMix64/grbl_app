@@ -178,5 +178,8 @@ Reglas:
 | FLOW-04 | El presupuesto usa el búfer **real** del firmware, no 128 B asumidos | `BuildInfo` desde `$I` + `CharacterCountingBuffer.resize`; tests *detecta un búfer de 256 B* y *no asume 128 B* |
 | FLOW-05 | El banner inicial no se pierde | La suscripción al puerto se crea antes de abrirlo (test de handshake: `bannerReceived`) |
 | FLOW-06 | Un `stop` no resetea sin confirmación de persistencia a través del isolate | `GrblWorker` emite `persistRequest` y espera `persistDone`; test *stop exige confirmar la persistencia* |
+| SEG-07 | El jog solo se envía en `Idle` o `Jog`, siempre con `F` | `JogCommand.validate()` + guardia en `GrblSerialService.jog`; tests *rechaza el jog fuera de Idle/Jog* y *valida ejes y avance* |
+| SEG-08 | La escritura en EEPROM envía solo los parámetros que cambian | `GrblSettings.diff` en `CalibrationController.applyDraft`; test *solo escribe los parámetros que cambian* |
+| SEG-09 | Una calibración de pasos/mm se rechaza si la medida no es plausible | `StepsPerMmCalibration.validate()` (±50 %); test *rechaza medidas imposibles sin escribir* |
 
 
