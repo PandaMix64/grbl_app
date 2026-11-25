@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:isolate';
 
 import '../../core/grbl/grbl_constants.dart';
+import '../../domain/entities/axis.dart';
 import '../../domain/entities/grbl_handshake.dart';
 import '../../domain/entities/grbl_settings.dart';
+import '../../domain/entities/jog_command.dart';
 import '../../domain/entities/parser_state.dart';
 import '../../domain/entities/status_report.dart';
 import '../../domain/entities/work_offsets.dart';
@@ -156,6 +158,49 @@ class GrblWorker {
         case GrblWorkerCommand.home:
           _service.home();
           _reply(id);
+        case GrblWorkerCommand.jog:
+          final Object? rawValues = raw[GrblWorkerKey.values];
+          final Object? rawFeed = raw[GrblWorkerKey.feedMmMin];
+          if (rawValues is! Map || rawFeed is! num) {
+            throw const GrblWorkerException(
+              'El comando jog requiere values y feedMmMin.',
+            );
+          }
+          final Map<MachineAxis, double> increments = <MachineAxis, double>{};
+          for (final MapEntry<Object?, Object?> entry in rawValues.entries) {
+            final MachineAxis? axis = _axisByName(entry.key);
+            final Object? value = entry.value;
+            if (axis != null && value is num) {
+              increments[axis] = value.toDouble();
+            }
+          }
+          _service.jog(
+            JogCommand(
+              values: increments,
+              feedMmMin: rawFeed.toDouble(),
+              mode: raw[GrblWorkerKey.absolute] == true
+                  ? JogMode.absoluteMachine
+                  : JogMode.relative,
+            ),
+          );
+          _reply(id);
+        case GrblWorkerCommand.writeSettings:
+          final Object? rawChanges = raw[GrblWorkerKey.changes];
+          if (rawChanges is! Map) {
+            throw const GrblWorkerException(
+              'El comando writeSettings requiere changes.',
+            );
+          }
+          final Map<int, String> changes = <int, String>{};
+          for (final MapEntry<Object?, Object?> entry in rawChanges.entries) {
+            final int? code = int.tryParse('${entry.key}');
+            final Object? value = entry.value;
+            if (code != null && value is String) {
+              changes[code] = value;
+            }
+          }
+          final int written = await _service.writeSettings(changes);
+          _reply(id, <String, Object?>{GrblWorkerKey.written: written});
         case GrblWorkerCommand.readSettings:
           final GrblSettings settings = await _service.readSettings();
           _reply(id, settings.toJson());
@@ -243,4 +288,14 @@ class GrblWorker {
     await _service.dispose();
     _inbox?.close();
   }
+}
+
+/// Traduce el nombre de eje que llega en el mensaje (`x`, `y`, `z`) a [MachineAxis].
+MachineAxis? _axisByName(Object? name) {
+  for (final MachineAxis axis in MachineAxis.values) {
+    if (axis.name == name) {
+      return axis;
+    }
+  }
+  return null;
 }

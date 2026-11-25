@@ -51,7 +51,7 @@ void main() {
       expect(result.buildInfo!.hasVariableSpindle, isTrue);
       expect(result.buildInfo!.plannerBlocks, 15);
       expect(result.settings.integer(32), 1);
-      expect(result.settings.stepsPerMm(Axis.z), 400);
+      expect(result.settings.stepsPerMm(MachineAxis.z), 400);
       expect(result.parserState.isMetric, isTrue);
       expect(result.parserState.workCoordinateSystem, 'G54');
       expect(result.parserState.spindleMode, 'M5');

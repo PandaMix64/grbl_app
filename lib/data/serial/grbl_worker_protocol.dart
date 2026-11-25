@@ -24,6 +24,8 @@ abstract final class GrblWorkerCommand {
   static const String readParserState = 'readParserState';
   static const String readOffsets = 'readOffsets';
   static const String dispose = 'dispose';
+  static const String jog = 'jog';
+  static const String writeSettings = 'writeSettings';
 }
 
 /// Eventos worker → cliente.
@@ -54,4 +56,9 @@ abstract final class GrblWorkerKey {
   static const String settleMs = 'settleMs';
   static const String ports = 'ports';
   static const String parserState = 'parserState';
+  static const String values = 'values';
+  static const String feedMmMin = 'feedMmMin';
+  static const String absolute = 'absolute';
+  static const String changes = 'changes';
+  static const String written = 'written';
 }

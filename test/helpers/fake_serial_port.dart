@@ -112,6 +112,7 @@ class FakeSerialPort implements SerialPortRepository {
   @override
   void writeLine(String line) {
     writtenLines.add(line);
+    _applySettingWrite(line);
     final int bytes = line.length + 1;
     _unackedBytes += bytes;
     if (_unackedBytes > peakUnackedBytes) {
@@ -132,6 +133,23 @@ class FakeSerialPort implements SerialPortRepository {
         emitLine('ok');
       });
     }
+  }
+
+  /// Simula la escritura de un parámetro `$x=valor` actualizando la EEPROM
+  /// emulada, de modo que una relectura posterior refleje el cambio.
+  void _applySettingWrite(String line) {
+    final RegExp pattern = RegExp(r'^\$(\d+)=(.+)$');
+    final RegExpMatch? match = pattern.firstMatch(line);
+    if (match == null) {
+      return;
+    }
+    final String code = match.group(1)!;
+    final String value = match.group(2)!.trim();
+    final String prefix = '\$$code=';
+    settingsLines = <String>[
+      for (final String setting in settingsLines)
+        if (setting.startsWith(prefix)) '$prefix$value' else setting,
+    ];
   }
 
   /// Respuestas emuladas de los comandos de sistema de GRBL.

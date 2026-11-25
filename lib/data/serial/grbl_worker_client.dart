@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:isolate';
 
 import '../../core/grbl/grbl_constants.dart';
+import '../../domain/entities/axis.dart';
 import '../../domain/entities/grbl_handshake.dart';
 import '../../domain/entities/grbl_settings.dart';
+import '../../domain/entities/jog_command.dart';
 import '../../domain/entities/parser_state.dart';
 import '../../domain/entities/status_report.dart';
 import '../../domain/entities/work_offsets.dart';
@@ -278,6 +280,36 @@ class GrblWorkerClient {
   Future<void> unlock() => _send(GrblWorkerCommand.unlock);
 
   Future<void> home() => _send(GrblWorkerCommand.home);
+
+  /// Ejecuta un jog (`$J=`) con avance obligatorio.
+  Future<void> jog({
+    required Map<MachineAxis, double> values,
+    required double feedMmPerMin,
+    JogMode mode = JogMode.relative,
+  }) {
+    return _send(GrblWorkerCommand.jog, <String, Object?>{
+      GrblWorkerKey.values: <String, double>{
+        for (final MapEntry<MachineAxis, double> entry in values.entries)
+          entry.key.name: entry.value,
+      },
+      GrblWorkerKey.feedMmMin: feedMmPerMin,
+      GrblWorkerKey.absolute: mode == JogMode.absoluteMachine,
+    });
+  }
+
+  /// Escribe parámetros `$` y devuelve cuántos se aplicaron.
+  Future<int> writeSettings(Map<int, String> changes) async {
+    final Map<String, Object?> data = await _send(
+      GrblWorkerCommand.writeSettings,
+      <String, Object?>{
+        GrblWorkerKey.changes: <String, String>{
+          for (final MapEntry<int, String> entry in changes.entries)
+            entry.key.toString(): entry.value,
+        },
+      },
+    );
+    return (data[GrblWorkerKey.written] as num?)?.toInt() ?? 0;
+  }
 
   Future<GrblSettings> readSettings() async =>
       GrblSettings.fromJson(await _send(GrblWorkerCommand.readSettings));

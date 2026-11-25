@@ -4,6 +4,7 @@ import '../../core/grbl/grbl_constants.dart';
 import '../../domain/entities/build_info.dart';
 import '../../domain/entities/grbl_handshake.dart';
 import '../../domain/entities/grbl_settings.dart';
+import '../../domain/entities/jog_command.dart';
 import '../../domain/entities/machine_state.dart';
 import '../../domain/entities/parser_state.dart';
 import '../../domain/entities/status_report.dart';
@@ -268,6 +269,47 @@ class GrblSerialService {
   /// Puertos seriales disponibles en el sistema.
   Future<List<SerialPortInfo>> listPorts() => _port.listPorts();
 
+  /// Ejecuta un jog (`$J=`).
+  ///
+  /// GRBL solo acepta jogs en `Idle` o `Jog`; en cualquier otro estado devolvería
+  /// `error:` y el movimiento quedaría rechazado, por lo que se corta antes.
+  void jog(JogCommand command) {
+    _requireConnected();
+    if (!state.allowsJog) {
+      throw GrblSafetyException(
+        'El jog solo se acepta en Idle o Jog (estado actual: ${state.label}).',
+      );
+    }
+    _buffer.enqueue(command.build());
+    _pump();
+  }
+
+  /// Escribe parámetros `$x=valor` uno a uno, esperando el `ok` de cada uno.
+  ///
+  /// El llamador debe calcular los cambios con `GrblSettings.diff` para enviar
+  /// **solo** lo que difiere: cada escritura consume un ciclo de EEPROM.
+  /// Devuelve cuántos parámetros se escribieron.
+  Future<int> writeSettings(
+    Map<int, String> changes, {
+    Duration? timeout,
+  }) async {
+    _requireConnected();
+    if (changes.isEmpty) {
+      return 0;
+    }
+    int written = 0;
+    for (final MapEntry<int, String> change in changes.entries) {
+      await _request(
+        '${r'$'}${change.key}=${change.value}',
+        accept: (String line) => false,
+        timeout: timeout,
+      );
+      written++;
+    }
+    _emitMessage('Parámetros escritos en la EEPROM: $written.');
+    return written;
+  }
+
   /// Tamaño actual del búfer de recepción usado para el control de flujo.
   int get rxBufferSize => _buffer.bufferSize;
 
@@ -393,6 +435,18 @@ class GrblSerialService {
     await connect(portName: portName, baudRate: baudRate);
     final String bannerLine = await banner;
     startStatusPolling();
+
+    // Espera al primer status report: sin él, `state` es `unknown` y acciones
+    // como el jog se rechazarían aunque la máquina esté lista.
+    try {
+      await _waitFor(
+        (StatusReport report) => true,
+        timeout: const Duration(seconds: 2),
+        onTimeout: 'Sin telemetría inicial.',
+      );
+    } on GrblSafetyException {
+      // Algunos adaptadores tardan en arrancar; no se aborta la conexión.
+    }
 
     BuildInfo? build;
     try {
