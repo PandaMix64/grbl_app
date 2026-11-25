@@ -84,6 +84,15 @@ void main() {
     expect(find.text('Parámetros de GRBL'), findsOneWidget);
     expect(find.text('Pasos por milímetro'), findsOneWidget);
     expect(find.text('Perfiles de máquina'), findsOneWidget);
+
+    await tester.tap(find.text('CAM').first);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('CAM · Grabado láser'), findsOneWidget);
+    expect(find.text('Elegir imagen'), findsOneWidget);
+    expect(find.text('Parámetros de grabado'), findsOneWidget);
+    expect(find.textContaining('Generar'), findsWidgets);
   });
 
   testWidgets('el visor carga el ejemplo y dibuja el lienzo', (
