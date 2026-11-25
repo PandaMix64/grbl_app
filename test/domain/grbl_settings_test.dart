@@ -38,12 +38,12 @@ ok''';
     test('expone los parámetros por eje con el código correcto', () {
       final GrblSettings settings = GrblSettings.parse(samplePayload);
 
-      expect(settings.stepsPerMm(Axis.x), 250);
-      expect(settings.stepsPerMm(Axis.z), 400);
-      expect(Axis.y.stepsPerMmCode, 101);
-      expect(Axis.z.maxTravelCode, 132);
-      expect(settings.maxTravel(Axis.z), 80);
-      expect(settings.acceleration(Axis.y), 10);
+      expect(settings.stepsPerMm(MachineAxis.x), 250);
+      expect(settings.stepsPerMm(MachineAxis.z), 400);
+      expect(MachineAxis.y.stepsPerMmCode, 101);
+      expect(MachineAxis.z.maxTravelCode, 132);
+      expect(settings.maxTravel(MachineAxis.z), 80);
+      expect(settings.acceleration(MachineAxis.y), 10);
     });
 
     test('detecta modo láser, soft limits y homing', () {

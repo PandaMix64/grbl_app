@@ -1,12 +1,12 @@
 /// Ejes soportados por GRBL con sus códigos de parámetros asociados.
 ///
 /// Evita los "números mágicos" de `$100..$132` repartidos por el código.
-enum Axis {
+enum MachineAxis {
   x(0),
   y(1),
   z(2);
 
-  const Axis(this.axisIndex);
+  const MachineAxis(this.axisIndex);
 
   /// Posición del eje en los vectores de posición y en el sufijo de parámetro.
   final int axisIndex;

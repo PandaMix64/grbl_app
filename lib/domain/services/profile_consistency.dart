@@ -48,7 +48,7 @@ class ProfileConsistency {
   }) {
     final List<ConsistencyIssue> issues = <ConsistencyIssue>[];
 
-    for (final Axis axis in Axis.values) {
+    for (final MachineAxis axis in MachineAxis.values) {
       final double? steps = settings.stepsPerMm(axis);
       if (steps == null || steps <= 0) {
         issues.add(
@@ -98,7 +98,7 @@ class ProfileConsistency {
       );
     }
 
-    for (final Axis axis in Axis.values) {
+    for (final MachineAxis axis in MachineAxis.values) {
       final double expected = profile.travel[axis.axisIndex];
       final double? configured = settings.maxTravel(axis);
       if (configured == null || configured <= 0) {

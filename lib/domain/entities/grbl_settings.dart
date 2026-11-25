@@ -115,10 +115,10 @@ class GrblSettings {
   bool get hardLimitsEnabled => integer(21) == 1;
   bool get homingEnabled => integer(22) == 1;
 
-  double? stepsPerMm(Axis axis) => number(axis.stepsPerMmCode);
-  double? maxRate(Axis axis) => number(axis.maxRateCode);
-  double? acceleration(Axis axis) => number(axis.accelerationCode);
-  double? maxTravel(Axis axis) => number(axis.maxTravelCode);
+  double? stepsPerMm(MachineAxis axis) => number(axis.stepsPerMmCode);
+  double? maxRate(MachineAxis axis) => number(axis.maxRateCode);
+  double? acceleration(MachineAxis axis) => number(axis.accelerationCode);
+  double? maxTravel(MachineAxis axis) => number(axis.maxTravelCode);
 
   /// Devuelve una copia con el parámetro actualizado.
   GrblSettings withValue(int code, num value) {
