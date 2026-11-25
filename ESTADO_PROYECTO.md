@@ -86,7 +86,19 @@ Cada commit de una sesión lleva su etiqueta en el mensaje (`... [S-01]`), de mo
 | 5 | Tablero de fases, tareas y bitácora (este archivo) | `ESTADO_PROYECTO.md` | ✅ |
 | 6 | README con estado, requisitos y estructura objetivo | `README.md` | ✅ |
 
-**Verificaciones ejecutadas en la sesión:** `flutter create` OK · `git init` OK · `flutter analyze` OK · `flutter test` OK.
+**Verificaciones ejecutadas en la sesión:** `flutter create` OK · `git init` OK · `flutter analyze` → *No issues found* · `flutter test` → *All tests passed*.
+
+**Trazabilidad (commits de S-01):**
+
+| Hash | Commit |
+| :--- | :--- |
+| `cd41c96` | `chore(project): inicializa app Flutter para windows, linux, macos y android` |
+| `2926b30` | `chore(repo): normaliza finales de linea y excluye secretos de firma` |
+| `5cc8d70` | `docs: incorpora ruta de accion y revision tecnica de GRBL v1.1h` |
+| `9b55990` | `docs(estado): crea tablero de seguimiento de fases y bitacora` |
+
+Para recuperar la sesión completa: `git log --oneline --grep="S-01"`.
+
 
 **Decisiones tomadas (ver §6):** ADR-001 a ADR-006.
 
