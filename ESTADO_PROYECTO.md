@@ -139,6 +139,19 @@ Para recuperar la sesión completa: `git log --oneline --grep="S-01"`.
 
 **Decisiones tomadas:** ADR-006 aplicado (upgrade), ADR-007, ADR-008, ADR-009.
 
+**Trazabilidad (commits de S-02):**
+
+| Hash | Commit |
+| :--- | :--- |
+| `e08180a` | `chore(deps): actualiza a Flutter 3.50.1 y fija el stack aprobado` |
+| `d39c438` | `feat(app): esqueleto Material 3 con navegacion adaptativa` |
+| `d017d66` | `feat(domain): entidades GRBL y contrato de puerto serial` |
+| `0421f72` | `feat(serial): conteo de caracteres y secuencias de seguridad` |
+| `20d3f3a` | `ci: analisis, formato y pruebas en cada push` |
+| `5f7dd34` | `docs: normativa de seguridad y tablero de la sesion S-02` |
+
+Recuperación de la sesión: `git log --oneline --grep="S-02"`.
+
 **Abierto al cierre:** `LibSerialPortRepository` (FFI), isolate worker real, extracción del `SafetyController`, esquema Drift, licencia/CHANGELOG y ejecución del CI en remoto.
 
 ---
