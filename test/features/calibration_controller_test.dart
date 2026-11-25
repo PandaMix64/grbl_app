@@ -6,6 +6,8 @@ import 'package:grbl_app/data/database/app_database.dart';
 import 'package:grbl_app/data/serial/grbl_worker_client.dart';
 import 'package:grbl_app/domain/entities/axis.dart';
 import 'package:grbl_app/domain/entities/machine_profile.dart';
+import 'package:grbl_app/domain/entities/machine_state.dart';
+import 'package:grbl_app/domain/services/profile_consistency.dart';
 import 'package:grbl_app/features/calibration/calibration_controller.dart';
 import 'package:grbl_app/features/connection/connection_controller.dart';
 
@@ -291,5 +293,68 @@ void main() {
 
       expect(state().error, contains('Conecta'));
     });
+
+    test('ir al cero usa el delta hasta WPos (0,0)', () async {
+      await connect();
+      await client.requestStatus();
+      final Stopwatch watch = Stopwatch()..start();
+      while (container.read(connectionControllerProvider).workPosition ==
+          null) {
+        if (watch.elapsed > const Duration(seconds: 3)) {
+          fail('Sin telemetría de posición.');
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+
+      await controller().goToWorkZero();
+
+      expect(
+        port.writtenLines,
+        contains(r'$J=G91 X-10.000 Y-20.000 F500.000'),
+        reason: port.writtenLines.join(' | '),
+      );
+    });
+
+    test('ir al cero exige Idle', () async {
+      await connect();
+      port.state = 'Run';
+      final Stopwatch watch = Stopwatch()..start();
+      while (container.read(connectionControllerProvider).machineState !=
+          MachineState.run) {
+        if (watch.elapsed > const Duration(seconds: 3)) {
+          fail('La máquina no reportó Run.');
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+
+      await controller().goToWorkZero();
+
+      expect(state().error, contains('Idle'));
+    });
+  });
+
+  group('perfil frente a la EEPROM', () {
+    test(
+      'al refrescar los parámetros se revalidan las discrepancias',
+      () async {
+        await connect();
+        expect(container.read(connectionControllerProvider).issues, isEmpty);
+
+        // Perfil con 400 mm de recorrido X frente a `$130=300`: discrepancia
+        // bloqueante que solo puede aparecer al revalidar contra la EEPROM.
+        await controller().saveProfile(profile.copyWith(travelXmm: 400));
+        await controller().refreshSettings();
+
+        final List<ConsistencyIssue> issues = container
+            .read(connectionControllerProvider)
+            .issues;
+        expect(issues, isNotEmpty);
+        expect(
+          issues.any((ConsistencyIssue issue) => issue.code == 'TRAVEL_X'),
+          isTrue,
+          reason: issues.join(' | '),
+        );
+      },
+    );
   });
 }

@@ -112,4 +112,28 @@ void main() {
     );
     expect(runButton.onPressed, isNull);
   });
+
+  testWidgets('la barra superior ofrece consola y comandos básicos', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(buildApp());
+    await settle(tester);
+
+    expect(find.text('Sin perfil de máquina'), findsOneWidget);
+    final IconButton softReset = tester.widget<IconButton>(
+      find.byKey(const Key('topbar-soft-reset')),
+    );
+    expect(softReset.onPressed, isNull);
+    final IconButton unlock = tester.widget<IconButton>(
+      find.byKey(const Key('topbar-unlock')),
+    );
+    expect(unlock.onPressed, isNull);
+
+    await tester.tap(find.byKey(const Key('topbar-console')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Consola'), findsOneWidget);
+    expect(find.text('Sin tráfico todavía.'), findsOneWidget);
+    expect(find.textContaining('Sin conexión'), findsWidgets);
+  });
 }
