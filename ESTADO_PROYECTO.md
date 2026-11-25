@@ -192,6 +192,17 @@ Recuperación de la sesión: `git log --oneline --grep="S-02"`.
 
 **Decisiones tomadas:** ADR-011, ADR-012, ADR-013, ADR-014.
 
+**Trazabilidad (commits de S-03):**
+
+| Hash | Commit |
+| :--- | :--- |
+| `9a662e4` | `chore(deps): declara libserialport como dependencia directa` |
+| `98f29f7` | `feat(domain): build info, estado del parser y offsets de trabajo` |
+| `d8bfe25` | `feat(serial): handshake real, deteccion de bufer y worker en isolate` |
+| `df5c280` | `docs: tablero de S-03 y criterios de flujo del handshake` |
+
+Recuperación de la sesión: `git log --oneline --grep="S-03"`.
+
 **Abierto al cierre:** esquema Drift, providers de Riverpod, UI de conexión, extracción del `SafetyController` y verificación con hardware real.
 
 ---
