@@ -60,11 +60,6 @@ class ViewerPage extends ConsumerWidget {
                 if (state.hasProgram) ...<Widget>[
                   const SizedBox(width: 8),
                   IconButton(
-                    tooltip: 'Centrar trazado',
-                    onPressed: () => canvasKey.currentState?.resetView(),
-                    icon: const Icon(Icons.fit_screen),
-                  ),
-                  IconButton(
                     tooltip: 'Cerrar programa',
                     onPressed: controller.clear,
                     icon: const Icon(Icons.close),
@@ -85,21 +80,34 @@ class ViewerPage extends ConsumerWidget {
                 ),
               ),
             if (state.hasProgram) ...<Widget>[
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               _ProgramStats(program: state.program!),
-              const SizedBox(height: 12),
-              const ExecutionBar(),
             ],
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             Expanded(
               child: state.hasProgram
-                  ? _canvas(
-                      state.program!,
-                      connection,
-                      profile,
-                      theme.colorScheme.outlineVariant,
-                      ref.watch(executionControllerProvider).executedLine,
-                      canvasKey,
+                  ? Stack(
+                      children: <Widget>[
+                        Positioned.fill(
+                          child: _canvas(
+                            state.program!,
+                            connection,
+                            profile,
+                            theme.colorScheme.outlineVariant,
+                            ref.watch(executionControllerProvider).executedLine,
+                            canvasKey,
+                          ),
+                        ),
+                        Positioned(
+                          top: 10,
+                          left: 10,
+                          right: 10,
+                          child: ExecutionBar(
+                            onFitView: () =>
+                                canvasKey.currentState?.resetView(),
+                          ),
+                        ),
+                      ],
                     )
                   : _emptyState(theme),
             ),

@@ -118,11 +118,18 @@ void main() {
     await tester.pump();
     expect(find.byKey(const Key('viewer-canvas')), findsOneWidget);
 
-    // La barra de ejecución aparece y queda bloqueada sin conexión.
-    expect(find.text('Ejecución'), findsOneWidget);
-    expect(find.textContaining('Conecta la máquina'), findsOneWidget);
-    final FilledButton runButton = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Ejecutar'),
+    // La barra de ejecución compacta vive sobre el lienzo y queda bloqueada sin
+    // conexión.
+    expect(find.byTooltip('Ejecutar programa'), findsOneWidget);
+    expect(
+      find.textContaining('Conecta la máquina para ejecutar'),
+      findsOneWidget,
+    );
+    final IconButton runButton = tester.widget<IconButton>(
+      find.ancestor(
+        of: find.byTooltip('Ejecutar programa'),
+        matching: find.byType(IconButton),
+      ),
     );
     expect(runButton.onPressed, isNull);
   });
