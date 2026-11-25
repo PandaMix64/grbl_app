@@ -238,6 +238,18 @@ Recuperación de la sesión: `git log --oneline --grep="S-03"`.
 
 **Decisiones tomadas:** ADR-015, ADR-016.
 
+**Trazabilidad (commits de S-04):**
+
+| Hash | Commit |
+| :--- | :--- |
+| `a346cbd` | `feat(db): esquema drift de perfiles, proyectos y recientes` |
+| `1eb41f9` | `feat(serial): persistRequest con estado modal y timeout configurable` |
+| `752ab66` | `feat(repository): persiste el punto de reanudacion antes del reset` |
+| `159f0da` | `feat(connection): providers riverpod y barra de conexion` |
+| `333c4b7` | `docs: cierra la fase 1 con persistencia y UI de conexion` |
+
+Recuperación de la sesión: `git log --oneline --grep="S-04"`.
+
 **Abierto al cierre:** prueba en banco (R-10, pospuesta por decisión del usuario hasta completar la UI) y toda la Fase 2.
 
 ---
