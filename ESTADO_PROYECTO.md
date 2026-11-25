@@ -35,7 +35,7 @@
 | **Fase 2: Calibración** | Jogging, pasos/mm, parámetros `$`, perfiles y *backlash* | ✅ **Cerrada** | Jogging, parámetros, pasos/mm, perfiles, holgura, homing y origen |
 | **Fase 3: Visor 3D** | Renderizado, interpretación de G-code, pausa/detención y reanudación segura | 🟡 **En curso (~45 %)** | Intérprete, proyección, pintor y visor con telemetría listos; falta ejecución y pausa |
 | **Fase 3: Visor 3D** | Renderizado, interpretación de G-code, pausa/detención y reanudación segura | ⬜ Pendiente | `ResumeState` y `MotionSegment` ya existen; falta persistencia y render |
-| **Fase 4: Generador CAM** | Imagen → G-code (vectorización, dithering, relieve 2.5D) | ⬜ Pendiente | Modo láser requiere `$32` (P1-1) |
+| **Fase 4: Generador CAM** | Imagen → G-code (vectorización, dithering, relieve 2.5D) | 🟡 En curso (grabado láser hecho) | Modo láser requiere `$32` (P1-1) |
 | **Fase 5: Optimización y Empaquetado** | Rendimiento, atajos, builds Windows/Linux/macOS/Android | ⬜ Pendiente | — |
 
 Leyenda: 🟡 en curso · ✅ cerrada · ⬜ pendiente · 🔴 bloqueada
@@ -565,6 +565,44 @@ Recuperación de la sesión: `git log --oneline --grep="S-09"`.
 
 ---
 
+### S-12 — 2026-11-24 · CAM: grabado láser desde imagen (M4 primera parte)
+
+**Alcance:** primer bloque de la Fase 4 según el plan del autor («dithering/umbrales láser con `M4`»): imagen → G-code de grabado, en isolate y con previsualización obligatoria en el visor.
+
+**Entregado**
+
+| # | Cambio | Archivo(s) | Estado |
+| :--- | :--- | :--- | :--- |
+| 1 | `EngravingGenerator`: umbral, tramado Floyd–Steinberg y escala de grises con `M4` | `lib/domain/services/engraving_generator.dart` | ✅ |
+| 2 | Generación en isolate (`Isolate.run`) y límite de 250 000 celdas | `engraving_generator.dart` | ✅ |
+| 3 | `CamController`: valida perfil láser y volumen antes de generar; envía al visor | `lib/features/cam/cam_controller.dart` | ✅ |
+| 4 | Pantalla CAM con imagen, parámetros, resultado y avisos | `lib/features/cam/cam_page.dart` | ✅ |
+| 5 | 11 pruebas nuevas (215 en verde, 1 saltada) | `test/domain/engraving_generator_test.dart`, `test/features/cam_controller_test.dart`, `test/widget_test.dart` | ✅ |
+
+**Verificaciones ejecutadas:** `dart format --set-exit-if-changed` → 0 cambios · `flutter analyze` → *No issues found* · `flutter test` → **215 en verde, 1 saltada**.
+
+**Decisiones de diseño**
+
+- Solo láser: la potencia por celda solo tiene sentido con `M4`; con husillo (`M3`) el `S` es velocidad, no potencia.
+- El G-code se agrupa por tramos de potencia igual y cada fila entra con `G0 ... S0`: menos líneas y láser apagado en los rápidos.
+- La fila 0 de la imagen es el borde **superior** del grabado (como en un editor gráfico), con origen en la esquina inferior izquierda.
+- El CAM **no** envía nada a la máquina: carga el resultado en el visor, donde se revisa y se ejecuta con las barreras de M3.2.
+
+**Decisiones tomadas:** ADR-035, ADR-036.
+
+**Trazabilidad (commits de S-12):**
+
+| Hash | Commit |
+| :--- | :--- |
+| `8af109a` | `feat(cam): genera grabado laser desde imagen en un isolate` |
+| `f929ae6` | `test: cubre el generador de grabado y el controlador CAM` |
+
+Recuperación de la sesión: `git log --oneline --grep="S-12"`.
+
+**Abierto al cierre:** vectorización de contornos y relieve 2.5D (resto de la Fase 4); las pestañas de sujeción siguen pendientes.
+
+---
+
 ## 5. Decisiones de arquitectura (ADR resumidas)
 
 | ID | Decisión | Motivo | Consecuencia |
@@ -603,6 +641,8 @@ Recuperación de la sesión: `git log --oneline --grep="S-09"`.
 | ADR-032 | El lienzo expone `resetView()` y se reencuadra al cambiar de programa | Un paneo viejo deja el trazado fuera del viewport sin forma de volver | Clave en un `Provider`; `RepaintBoundary` para que el paneo no repinte los lotes |
 | ADR-033 | Reiniciar un trabajo guardado reenvía desde la línea confirmada, con `$G`/`$#` y distancia ≤ 1 mm como precondiciones | Tras `stop` el planificador está vacío: `~` no continúa nada y el bloque guardado puede no haberse ejecutado | La app no mueve sola: ofrece «Llevar al punto guardado» para que el operario confirme |
 | ADR-034 | Perder el enlace con trabajo activo marca `interrupted` y conserva el punto de reanudación | El estado de la máquina es incierto pero el progreso guardado sigue siendo válido | Se cancelan suscripciones y el proyecto pasa a `interrupted` en SQLite |
+| ADR-035 | El CAM de imágenes se limita a láser (`M4`) y ejecuta la conversión en un isolate con tope de 250 000 celdas | Con husillo el `S` es velocidad, no potencia; y una rejilla enorme generaría millones de líneas | Modos umbral, tramado y escala de grises; rechazo explícito si el perfil no es láser |
+| ADR-036 | El CAM nunca envía a la máquina: carga el G-code en el visor | Una previsualización obligatoria evita ejecutar un grabado mal escalado o invertido | Se reutilizan visor, compensación de holgura y barreras de ejecución |
 
 ---
 
@@ -647,8 +687,8 @@ Recuperación de la sesión: `git log --oneline --grep="S-09"`.
 
 ## 8. Próximos pasos (orden estricto)
 
-1. **Completar la verificación en banco**: 5.6 (reanudar sin repetir tramo), 5.7 (detener), §6 (divergencia de reanudación), reinicio del trabajo guardado (§11) y robustez §7–§9.
-2. **M3.3 — CAM básico**: importar DXF/SVG, pestañas y mecanizado por pasadas reutilizando `BacklashCompensator`.
+1. **Completar la verificación en banco**: 5.6 (reanudar sin repetir tramo), 5.7 (detener), §6 (divergencia de reanudación), reinicio del trabajo guardado (§11), CAM (§12) y robustez §7–§9.
+2. **Fase 4 — resto del CAM**: vectorización de contornos, relieve 2.5D y pestañas de sujeción.
 3. Push al remoto para ejecutar el CI (R-08).
 
 

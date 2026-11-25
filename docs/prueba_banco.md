@@ -140,7 +140,23 @@ herramienta montada.
 
 ---
 
-## 12. Cierre
+## 12. CAM: grabado láser (S-12)
+
+**Solo con láser y gafas de protección.** Usa material de prueba (cartón o madera blanda) y potencia baja.
+
+| Paso | Acción | Esperado |
+| :--- | :--- | :--- |
+| 12.1 | Crear/seleccionar un perfil con herramienta **láser** | «Valores del perfil» rellena potencia, avance y ancho |
+| 12.2 | Cargar una imagen pequeña (≤ 50 mm) en modo Umbral | Resumen: tamaño, celdas, líneas y % grabado |
+| 12.3 | «Enviar al visor» | El visor dibuja el trazo y el archivo se llama `<imagen>_grabado.gcode` |
+| 12.4 | Ejecutar con potencia baja | El haz solo se enciende en las celdas oscuras y se apaga en los rápidos |
+| 12.5 | Probar Tramado y Escala de grises | Patrón de puntos y potencia variable respectivamente |
+| 12.6 | Cargar una imagen grande o un ancho mayor que el recorrido | Se rechaza con el motivo y no se genera nada |
+| 12.7 | Intentar generar con un perfil de fresadora | Se rechaza: el grabado por potencia requiere láser (`M4`) |
+
+---
+
+## 13. Cierre
 
 - Volcar los resultados en `ESTADO_PROYECTO.md` (sección de riesgos: R-10, R-13, R-19).
 - Si todo pasa, cerrar R-10 y planificar el flujo «reiniciar trabajo guardado» (R-18).

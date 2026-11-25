@@ -14,7 +14,7 @@ Flutter + Material Design 3, Clean Architecture con gestión de estado reactiva,
 | Fase 1 — Núcleo y Serial | ✅ Cerrada |
 | Fase 2 — Calibración | ✅ Cerrada |
 | Fase 3 — Visor 3D | 🟡 En curso (visor y ejecución listos) |
-| Fase 4 — Generador CAM | ⬜ Pendiente |
+| Fase 4 — Generador CAM | 🟡 En curso (grabado láser) |
 | Fase 5 — Optimización y empaquetado | ⬜ Pendiente |
 
 El detalle de tareas, decisiones (ADR), riesgos y bitácora de cada sesión vive en **[`ESTADO_PROYECTO.md`](ESTADO_PROYECTO.md)**. Empieza por ahí si retomas el proyecto.
@@ -139,7 +139,21 @@ permite pausar, reanudar y detener:
   última línea confirmada. Verifica `$G`/`$#` contra lo guardado y exige que la máquina esté a ≤ 1 mm del punto
   guardado (botón **Llevar al punto guardado**); si algo no coincide, se cancela en lugar de arriesgar la pieza.
 
+## CAM
+
+`CAM` convierte una **imagen** (PNG/JPG/BMP) en G-code de grabado láser con `M4`:
+
+- **Modos**: umbral (silueta), tramado Floyd–Steinberg (medios tonos) y escala de grises (potencia proporcional).
+- **Parámetros**: ancho en mm (el alto sale por proporción), mm por celda, potencia `S` máxima y avance. El botón
+  «Valores del perfil» toma potencia, avance y ancho del perfil activo.
+- La conversión corre en un **isolate** con un tope de 250 000 celdas; el perfil debe ser de tipo láser y el grabado
+  debe caber en su recorrido.
+- **Previsualización obligatoria**: el resultado se carga en el visor (con la holgura aplicada al ejecutar) y nunca se
+  envía a la máquina desde el CAM.
+
+
 ## Barra superior
+
 
 Siempre visible: estado de la máquina, puerto, perfil activo (se puede cambiar sin ir a «Calibración»), aviso de
 discrepancias con la EEPROM, consola de comandos y accesos rápidos a `$X` (desbloquear) y soft reset.
@@ -148,6 +162,9 @@ La consola muestra el tráfico real (`→` enviado, `←` recibido) **sin** tele
 líneas con historial de comandos y permite enviar líneas sueltas: las que empiezan por `$` se aceptan siempre; el
 resto exige `Idle`. El soft reset pide confirmación y se rechaza si hay un trabajo en curso («Detener» guarda el
 progreso antes).
+
+## Persistencia
+
 
 Los perfiles, proyectos y archivos recientes viven en SQLite (drift). El esquema está en `lib/data/database/app_database.dart` y **el código generado se versiona**, así que un clon nuevo compila sin pasos extra:
 
