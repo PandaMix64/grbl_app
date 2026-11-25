@@ -14,7 +14,7 @@ Flutter + Material Design 3, Clean Architecture con gestión de estado reactiva,
 | Fase 1 — Núcleo y Serial | ✅ Cerrada |
 | Fase 2 — Calibración | ✅ Cerrada |
 | Fase 3 — Visor 3D | 🟡 En curso (visor y ejecución listos) |
-| Fase 4 — Generador CAM | 🟡 En curso (grabado láser) |
+| Fase 4 — Generador CAM | 🟡 En curso (grabado y contornos) |
 | Fase 5 — Optimización y empaquetado | ⬜ Pendiente |
 
 El detalle de tareas, decisiones (ADR), riesgos y bitácora de cada sesión vive en **[`ESTADO_PROYECTO.md`](ESTADO_PROYECTO.md)**. Empieza por ahí si retomas el proyecto.
@@ -143,17 +143,24 @@ permite pausar, reanudar y detener:
 
 ## CAM
 
-`CAM` convierte una **imagen** (PNG/JPG/BMP) en G-code de grabado láser con `M4`:
+`CAM` convierte una **imagen** (PNG/JPG/BMP) en G-code, en dos modos:
 
+**Grabado** (raster, láser `M4`)
 - **Modos**: umbral (silueta), tramado Floyd–Steinberg (medios tonos) y escala de grises (potencia proporcional).
-- **Parámetros**: ancho en mm (el alto sale por proporción), mm por celda, potencia `S` máxima y avance. El botón
-  «Valores del perfil» toma potencia, avance y ancho del perfil activo.
-- La conversión corre en un **isolate** con un tope de 250 000 celdas; el perfil debe ser de tipo láser y el grabado
-  debe caber en su recorrido.
+- **Parámetros**: ancho en mm (el alto sale por proporción), mm por celda, potencia `S` máxima y avance.
+
+**Contorno** (corte de la silueta)
+- Vectoriza la imagen (con islas y huecos), simplifica los polígonos (Douglas–Peucker) y genera el corte.
+- **Láser**: una pasada con el haz conmutado; **husillo** (`M3`): pasadas en Z hasta la profundidad final.
+- **Pestañas** de sujeción: suben la Z (o apagan el haz) en tramos repartidos por el perímetro.
+
+Común:
+- La conversión corre en un **isolate** con topes de celdas/puntos; el grabado exige perfil láser y todo debe caber en el
+  recorrido del perfil.
 - **Previsualización obligatoria**: el resultado se carga en el visor (con la holgura aplicada al ejecutar) y nunca se
   envía a la máquina desde el CAM.
-- **Vista previa en la propia pantalla**: mapa de potencia del grabado (una celda = un píxel) sobre fondo claro, para ver
-  el resultado antes de generar el envío.
+- **Vista previa en la propia pantalla**: mapa de potencia del grabado o los contornos que se van a cortar, sobre fondo
+  claro, antes de enviar nada.
 
 
 ## Barra superior

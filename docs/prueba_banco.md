@@ -153,6 +153,9 @@ herramienta montada.
 | 12.5 | Probar Tramado y Escala de grises | Patrón de puntos y potencia variable respectivamente |
 | 12.6 | Cargar una imagen grande o un ancho mayor que el recorrido | Se rechaza con el motivo y no se genera nada |
 | 12.7 | Intentar generar con un perfil de fresadora | Se rechaza: el grabado por potencia requiere láser (`M4`) |
+| 12.8 | Cambiar a **Contorno** con herramienta husillo y crear un perfil de fresadora | La vista previa muestra los polígonos; el resumen indica vueltas, puntos y pasadas |
+| 12.9 | Ejecutar el contorno con `cutZ` mayor que una pasada | Baja por niveles hasta la profundidad final y sube a `Z` segura entre vueltas |
+| 12.10 | Añadir 2–3 pestañas y cortar en madera blanda | El perímetro queda sujeto por las pestañas; en láser esas zonas no se marcan |
 
 ---
 

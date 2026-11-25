@@ -35,7 +35,7 @@
 | **Fase 2: Calibración** | Jogging, pasos/mm, parámetros `$`, perfiles y *backlash* | ✅ **Cerrada** | Jogging, parámetros, pasos/mm, perfiles, holgura, homing y origen |
 | **Fase 3: Visor 3D** | Renderizado, interpretación de G-code, pausa/detención y reanudación segura | 🟡 **En curso (~45 %)** | Intérprete, proyección, pintor y visor con telemetría listos; falta ejecución y pausa |
 | **Fase 3: Visor 3D** | Renderizado, interpretación de G-code, pausa/detención y reanudación segura | ⬜ Pendiente | `ResumeState` y `MotionSegment` ya existen; falta persistencia y render |
-| **Fase 4: Generador CAM** | Imagen → G-code (vectorización, dithering, relieve 2.5D) | 🟡 En curso (grabado láser hecho) | Modo láser requiere `$32` (P1-1) |
+| **Fase 4: Generador CAM** | Imagen → G-code (vectorización, dithering, relieve 2.5D) | 🟡 En curso (grabado y contornos hechos) | Modo láser requiere `$32` (P1-1) |
 | **Fase 5: Optimización y Empaquetado** | Rendimiento, atajos, builds Windows/Linux/macOS/Android | ⬜ Pendiente | — |
 
 Leyenda: 🟡 en curso · ✅ cerrada · ⬜ pendiente · 🔴 bloqueada
@@ -645,6 +645,45 @@ Recuperación de la sesión: `git log --oneline --grep="S-13"`.
 
 ---
 
+### S-14 — 2026-11-24 · Fase 4: contornos vectorizados con pestañas (M4.1)
+
+**Alcance:** segundo bloque del CAM: vectorizar la silueta de una imagen y cortarla con pasadas en Z y pestañas de sujeción, con previsualización del recorrido.
+
+**Entregado**
+
+| # | Cambio | Archivo(s) | Estado |
+| :--- | :--- | :--- | :--- |
+| 1 | `ContourGenerator`: umbral → rejilla → aristas de píxel → bucles cerrados (con huecos) | `lib/domain/services/contour_generator.dart` | ✅ |
+| 2 | Simplificación (colineales + Douglas–Peucker) y límites de celdas/puntos | `contour_generator.dart` | ✅ |
+| 3 | Pasadas en Z para husillo (`M3`) y corte láser (`M4` con `S` conmutado) | `contour_generator.dart` | ✅ |
+| 4 | Pestañas: subdivisión por longitud de arco, subida de Z o apagado del haz | `contour_generator.dart` | ✅ |
+| 5 | Vista previa vectorial (PNG de los contornos simplificados) | `contour_generator.dart`, `cam_page.dart` | ✅ |
+| 6 | CAM con selector **Grabado / Contorno** y panel de parámetros de corte | `cam_controller.dart`, `cam_page.dart` | ✅ |
+| 7 | 11 pruebas nuevas (227 en verde, 1 saltada) | `test/domain/contour_generator_test.dart`, `test/features/cam_controller_test.dart`, `test/widget_test.dart` | ✅ |
+
+**Verificaciones ejecutadas:** `dart format --set-exit-if-changed` → 0 cambios · `flutter analyze` → *No issues found* · `flutter test` → **227 en verde, 1 saltada** · `flutter build windows --debug` → OK.
+
+**Decisiones de diseño**
+
+- La silueta se traza con las **aristas de cada píxel** y se encadena por vértices: detecta islas y huecos, es determinista y no necesita dependencias externas.
+- Douglas–Peucker con tolerancia en mm (0.2 por defecto) convierte la escalera de píxeles en diagonales mecanizables.
+- Con láser el contorno es una sola pasada y las pestañas apagan el haz (`S0`); con husillo se baja por niveles hasta `cutZ` y las pestañas levantan la Z.
+- En CAM solo hay **una operación activa**: cambiar de pestaña descarta el resultado anterior para que la vista previa nunca mienta.
+
+**Decisiones tomadas:** ADR-039, ADR-040.
+
+**Trazabilidad (commits de S-14):**
+
+| Hash | Commit |
+| :--- | :--- |
+| `9ebee0b` | `feat(cam): vectoriza contornos con pasadas y pestañas` |
+
+Recuperación de la sesión: `git log --oneline --grep="S-14"`.
+
+**Abierto al cierre:** relieve 2.5D (último bloque de la Fase 4) y pestañas en el grabado raster (hoy solo en contorno).
+
+---
+
 ## 5. Decisiones de arquitectura (ADR resumidas)
 
 | ID | Decisión | Motivo | Consecuencia |
@@ -687,6 +726,8 @@ Recuperación de la sesión: `git log --oneline --grep="S-13"`.
 | ADR-036 | El CAM nunca envía a la máquina: carga el G-code en el visor | Una previsualización obligatoria evita ejecutar un grabado mal escalado o invertido | Se reutilizan visor, compensación de holgura y barreras de ejecución |
 | ADR-037 | La vista previa del CAM es el mapa de potencia (1 celda = 1 píxel), no la imagen original | La trayectoria no permite juzgar el resultado; el mapa de celdas sí | PNG generado en el isolate junto al G-code; fondo claro y sin interpolación |
 | ADR-038 | Barra de ejecución compacta superpuesta al lienzo | La tarjeta completa robaba altura al viewport, que es lo que se mira | Iconos + progreso fino + una línea de aviso; «Centrar trazado» se integra en ella |
+| ADR-039 | Contornos por aristas de píxel + Douglas–Peucker (sin potrace ni dependencias) | Se necesitaba detectar islas y huecos con resultados deterministas y testeables | Bucles cerrados con simplificación en mm; tope de celdas y puntos |
+| ADR-040 | Una sola operación CAM activa (Grabado o Contorno) | Mostrar una vista previa de grabado junto a parámetros de corte confunde y es peligroso | Cambiar de operación descarta el resultado anterior |
 
 ---
 
@@ -732,7 +773,7 @@ Recuperación de la sesión: `git log --oneline --grep="S-13"`.
 ## 8. Próximos pasos (orden estricto)
 
 1. **Completar la verificación en banco**: 5.6 (reanudar sin repetir tramo), 5.7 (detener), §6 (divergencia de reanudación), reinicio del trabajo guardado (§11), CAM (§12) y robustez §7–§9.
-2. **Fase 4 — resto del CAM**: vectorización de contornos, relieve 2.5D y pestañas de sujeción.
+2. **Fase 4 — relieve 2.5D**: mapa de altura por niveles (último bloque del CAM) y pestañas en el grabado raster.
 3. Push al remoto para ejecutar el CI (R-08).
 
 
