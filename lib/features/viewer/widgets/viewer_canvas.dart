@@ -23,10 +23,11 @@ class ViewerCanvas extends StatefulWidget {
   final List<double>? workAreaMm;
 
   @override
-  State<ViewerCanvas> createState() => _ViewerCanvasState();
+  State<ViewerCanvas> createState() => ViewerCanvasState();
 }
 
-class _ViewerCanvasState extends State<ViewerCanvas> {
+/// Estado del lienzo, accesible desde la página para centrar el trazado.
+class ViewerCanvasState extends State<ViewerCanvas> {
   double _zoom = 1;
   Offset _pan = Offset.zero;
   double _yaw = -30;
@@ -34,6 +35,29 @@ class _ViewerCanvasState extends State<ViewerCanvas> {
 
   double _zoomStart = 1;
   double _yawStart = -30;
+
+  /// Devuelve la vista a encuadre inicial (zoom, paneo y giro).
+  void resetView() {
+    setState(() {
+      _zoom = 1;
+      _pan = Offset.zero;
+      _yaw = -30;
+      _pitch = 25;
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant ViewerCanvas oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Un programa nuevo debe encuadrarse solo: si no, el paneo anterior deja el
+    // trazado fuera del viewport y la vista parece «atorada».
+    if (!identical(oldWidget.program, widget.program)) {
+      _zoom = 1;
+      _pan = Offset.zero;
+      _yaw = -30;
+      _pitch = 25;
+    }
+  }
 
   void _onScaleStart(ScaleStartDetails details) {
     _zoomStart = _zoom;
@@ -50,14 +74,7 @@ class _ViewerCanvasState extends State<ViewerCanvas> {
     });
   }
 
-  void _resetView() {
-    setState(() {
-      _zoom = 1;
-      _pan = Offset.zero;
-      _yaw = -30;
-      _pitch = 25;
-    });
-  }
+  void _resetView() => resetView();
 
   @override
   Widget build(BuildContext context) {
@@ -89,17 +106,23 @@ class _ViewerCanvasState extends State<ViewerCanvas> {
           onDoubleTap: _resetView,
           child: Transform.translate(
             offset: _pan,
-            child: CustomPaint(
-              key: const Key('viewer-canvas'),
-              size: viewport,
-              painter: ProgramPainter(
-                program: program,
-                projection: projection,
-                colorScheme: theme.colorScheme,
-                headPosition: widget.headPosition,
-                executedUpToLine: widget.executedUpToLine,
-                workAreaMm: widget.workAreaMm,
-                gridStepMm: _gridStep(size),
+            // La pintura solo depende de la proyección: al panear se mueve la
+            // capa sin repintar los lotes de segmentos.
+            child: RepaintBoundary(
+              child: CustomPaint(
+                key: const Key('viewer-canvas'),
+                size: viewport,
+                isComplex: true,
+                willChange: false,
+                painter: ProgramPainter(
+                  program: program,
+                  projection: projection,
+                  colorScheme: theme.colorScheme,
+                  headPosition: widget.headPosition,
+                  executedUpToLine: widget.executedUpToLine,
+                  workAreaMm: widget.workAreaMm,
+                  gridStepMm: _gridStep(size),
+                ),
               ),
             ),
           ),

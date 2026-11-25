@@ -18,6 +18,9 @@ class ViewerPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final GlobalKey<ViewerCanvasState> canvasKey = ref.watch(
+      viewerCanvasKeyProvider,
+    );
     final ViewerUiState state = ref.watch(viewerControllerProvider);
     final ConnectionUiState connection = ref.watch(
       connectionControllerProvider,
@@ -57,6 +60,11 @@ class ViewerPage extends ConsumerWidget {
                 if (state.hasProgram) ...<Widget>[
                   const SizedBox(width: 8),
                   IconButton(
+                    tooltip: 'Centrar trazado',
+                    onPressed: () => canvasKey.currentState?.resetView(),
+                    icon: const Icon(Icons.fit_screen),
+                  ),
+                  IconButton(
                     tooltip: 'Cerrar programa',
                     onPressed: controller.clear,
                     icon: const Icon(Icons.close),
@@ -91,6 +99,7 @@ class ViewerPage extends ConsumerWidget {
                       profile,
                       theme.colorScheme.outlineVariant,
                       ref.watch(executionControllerProvider).executedLine,
+                      canvasKey,
                     )
                   : _emptyState(theme),
             ),
@@ -106,6 +115,7 @@ class ViewerPage extends ConsumerWidget {
     MachineProfile? profile,
     Color borderColor,
     int? executedLine,
+    GlobalKey<ViewerCanvasState> canvasKey,
   ) {
     final List<double>? workPosition = connection.workPosition;
     return DecoratedBox(
@@ -116,6 +126,7 @@ class ViewerPage extends ConsumerWidget {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
         child: ViewerCanvas(
+          key: canvasKey,
           program: program,
           executedUpToLine: executedLine,
           headPosition: workPosition != null && workPosition.length >= 3
@@ -187,6 +198,12 @@ class ViewerPage extends ConsumerWidget {
     }
   }
 }
+
+/// Clave del lienzo: permite que la página centre el trazado con un botón.
+final Provider<GlobalKey<ViewerCanvasState>> viewerCanvasKeyProvider =
+    Provider<GlobalKey<ViewerCanvasState>>(
+      (Ref ref) => GlobalKey<ViewerCanvasState>(),
+    );
 
 class _ProgramStats extends StatelessWidget {
   const _ProgramStats({required this.program});
