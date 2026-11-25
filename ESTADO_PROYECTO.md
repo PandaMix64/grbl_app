@@ -444,6 +444,63 @@ Recuperación de la sesión: `git log --oneline --grep="S-08"`.
 
 ---
 
+### S-09 — 2026-11-24 · Primera prueba con hardware, cierre crítico y barra de mando (M3.3)
+
+**Alcance:** corregir lo observado en la primera pasada con Arduino + GRBL 1.1h (P0 de desconexión), añadir consola de comandos, barra superior persistente con perfil activo y los ajustes de calibración pedidos.
+
+**Hallazgos de la prueba en banco**
+
+| # | Observación | Resolución |
+| :--- | :--- | :--- |
+| 1 | Log ilegible: la telemetría lo sobrescribía | Consola con búfer de 400 líneas, sin `<...>` ni ráfaga de `ok` |
+| 2 | **Cierre de la app al desconectar** (`_CrtIsValidHeapPointer`, `debug_heap.cpp:904`) | Doble `free` del `sp_port_config` + `use-after-free` del puerto frente al lector |
+| 3 | El aviso de perfil no aparecía al refrescar `$$` | `ConnectionController.revalidate` tras cada lectura y al cambiar de perfil |
+| 4 | Sin forma de salir de `Alarm` ni de resetear | `$X` y soft reset en la barra superior, con confirmación |
+| 5 | Pasos/mm se podía reaplicar por accidente | El campo «Medido» se vacía tras aplicar |
+| 6 | Faltaba «ir a 0,0» | `goToWorkZero()` con `$J=` calculado desde `WPos` |
+
+**Entregado**
+
+| # | Cambio | Archivo(s) | Estado |
+| :--- | :--- | :--- | :--- |
+| 1 | Config del puerto sin liberar dos veces y espera de drenaje del lector | `lib/data/serial/lib_serial_port_repository.dart` | ✅ |
+| 2 | `consoleLines`, `sendConsoleCommand` y `softReset` en el servicio | `lib/data/serial/grbl_serial_service.dart` | ✅ |
+| 3 | Comandos `consoleCommand`/`softReset` y evento `console` en el worker | `lib/data/serial/{grbl_worker,grbl_worker_client,grbl_worker_protocol}.dart` | ✅ |
+| 4 | `ConsoleController` + `ConsolePanel` (búfer, historial, filtros) | `lib/features/console/` | ✅ |
+| 5 | `AppTopBar`: estado, perfil activo, consola, `$X` y soft reset | `lib/app/widgets/app_top_bar.dart`, `home_shell.dart` | ✅ |
+| 6 | `profilesProvider` y revalidación al refrescar y al cambiar de perfil | `lib/app/providers.dart`, `connection_controller.dart`, `calibration_controller.dart` | ✅ |
+| 7 | `goToWorkZero` y limpieza del campo de medición | `calibration_controller.dart`, `steps_panel.dart`, `origin_panel.dart` | ✅ |
+| 8 | 9 pruebas nuevas (196 en verde, 1 saltada) | `test/serial/console_command_test.dart`, `test/features/calibration_controller_test.dart`, `test/widget_test.dart` | ✅ |
+
+**Verificaciones ejecutadas:** `dart format --set-exit-if-changed` → 0 cambios · `flutter analyze` → *No issues found* · `flutter test` → **196 en verde, 1 saltada**.
+
+**Decisiones de diseño**
+
+- El `config` del puerto se considera **propiedad** de `SerialPort`: liberarlo además es un doble `free` que solo se manifiesta al desconectar (y en debug aborta el proceso).
+- El isolate lector puede seguir dentro de `sp_wait` durante su timeout (50 ms): se espera 150 ms antes de `sp_close`/`sp_free_port`.
+- La consola acepta comandos `$` en cualquier estado; el resto exige `Idle`, para no inyectar movimiento en mitad de un trabajo.
+- El soft reset de la barra **no** sustituye a «Detener»: con un trabajo activo se rechaza y se remite al visor para no perder el progreso.
+- El aviso de discrepancias se recalcula con cada lectura de `$$` y con cada cambio de perfil, no solo al conectar.
+
+**Decisiones tomadas:** ADR-028, ADR-029, ADR-030.
+
+**Trazabilidad (commits de S-09):**
+
+| Hash | Commit |
+| :--- | :--- |
+| `82096b0` | `fix(serial): evita el doble free del config y el use-after-free al desconectar` |
+| `05ead34` | `feat(serial): consola de comandos y soft reset con espera de banner` |
+| `3293d46` | `feat(app): barra superior con estado, perfil, consola y comandos basicos` |
+| `1557acc` | `fix(calibracion): avisa al refrescar la EEPROM, limpia la medicion y permite ir a 0,0` |
+| `ccbf6b8` | `test: cubre consola, revalidacion del perfil, ir a cero y barra superior` |
+| `5396f6b` | `fix(serial): descarta escrituras mientras el puerto se cierra` |
+
+Recuperación de la sesión: `git log --oneline --grep="S-09"`.
+
+**Abierto al cierre:** re-verificar en banco el cierre al desconectar; `$X` no elimina la causa de la alarma (R-21); la consola es una vía avanzada que evita las salvaguardas de la UI (R-20).
+
+---
+
 ## 5. Decisiones de arquitectura (ADR resumidas)
 
 | ID | Decisión | Motivo | Consecuencia |
@@ -475,6 +532,9 @@ Recuperación de la sesión: `git log --oneline --grep="S-08"`.
 | ADR-025 | Pausa conserva el búfer y se reanuda con `0x9E` + `~`; detener resetea | Reenviar líneas tras una pausa duplicaría bloques que GRBL aún tiene en el planner | `resumeJob` no envía G-code; el reinicio tras `stop` es un flujo aparte |
 | ADR-026 | `$G`/`$#` se leen escribiendo directo al puerto y solo un `ok` con respuesta cierra la consulta | En `Hold` las líneas en vuelo no se confirman y los `ok` sueltos cerraban la consulta vacía | Se puede persistir el estado modal sin desbloquear el búfer |
 | ADR-027 | El punto de reanudación incluye `$#` (Drift v2 con `addColumn`) | SEG-05 exige comparar offsets: cambiar `G54`/`G92` movería la pieza | Migración aditiva; si no se pudo leer, se guarda `null` y se avisa |
+| ADR-028 | `port.config` es propiedad del `SerialPort`; el lector se drena antes de liberar el puerto | Liberar el config otra vez es doble `free` (aborta en debug) y liberar el puerto con el lector en `sp_wait` es `use-after-free` | `close()` espera 150 ms tras cerrar el lector (timeout 50 ms) |
+| ADR-029 | La consola acepta comandos `$` siempre; el resto solo en `Idle` | Es la única vía que evita las salvaguardas de la UI sin exponer la máquina a movimiento accidental | El servicio lanza `GrblSafetyException`; la UI lo muestra y no envía nada |
+| ADR-030 | Barra superior persistente con estado, perfil, consola, `$X` y soft reset | El operario necesita estado y salida de emergencia desde cualquier módulo | Vive fuera del enrutador; el soft reset se rechaza si hay trabajo activo |
 
 ---
 
@@ -502,7 +562,7 @@ Recuperación de la sesión: `git log --oneline --grep="S-08"`.
 | R-07 | `LibSerialPortRepository` sin implementar: la app aún no habla con hardware | Fase 1 detenida hasta implementarlo | Implementado en S-03 (FFI + worker con handshake); queda la prueba en banco (R-10) | 🟢 Cerrado |
 | R-08 | CI escrito pero nunca ejecutado en GitHub | Errores de entorno no detectados | Primer push y revisión del run | 🟡 Abierto |
 | R-09 | `GrblSerialService` mezcla transporte y política de seguridad | Mantenibilidad | Extraer `SafetyController` antes de la UI de calibración | 🟡 Vigilado |
-| R-10 | El camino FFI (DLL + handshake) no se ha ejecutado contra hardware ni en un build de escritorio | Fallos de plataforma no detectados hasta la primera prueba real | Build de escritorio verificado en S-08 (DLL presentes); falta la pasada con Arduino siguiendo `docs/prueba_banco.md` | 🟡 Listo para probar |
+| R-10 | El camino FFI (DLL + handshake) no se ha ejecutado contra hardware ni en un build de escritorio | Fallos de plataforma no detectados hasta la primera prueba real | Primera pasada real en S-09: conexión, handshake, EEPROM, jog, holgura y origen OK; el cierre al desconectar se corrigió (ADR-028) y falta re-verificarlo | 🟡 En verificación |
 | R-11 | Sin reconexión automática tras una pérdida de USB | Trabajo interrumpido y estado perdido | Detectar error de puerto, marcar `Disconnected` y exigir reconexión con handshake | 🟡 Vigilado |
 | R-12 | La persistencia (Drift) aún no existe: `persistProgress` solo puede confirmar de memoria | El ack de SEG-03 no garantiza durabilidad todavía | Cerrado en S-04: `ProjectRepository.persistAndConfirm` escribe en SQLite antes de confirmar | ✅ Cerrado |
 | R-13 | La conexión desde la UI se cubre en tests de controlador, no con un widget test que pulse «Conectar» | Un fallo de cableado UI ↔ controlador no se detectaría en CI | Prueba E2E en build con hardware (R-10) y revisión manual al integrar la Fase 2 | 🟡 Vigilado |
@@ -512,18 +572,18 @@ Recuperación de la sesión: `git log --oneline --grep="S-08"`.
 | R-17 | El intérprete es síncrono: un archivo de 100 000 líneas puede congelar la UI | Mala experiencia con trabajos grandes | Mover el parseo a un isolate (Fase 5 o antes si se nota) | 🟡 Vigilado |
 | R-18 | Tras **detener** no se ofrece reanudar: hace falta re-homing y reenviar desde el visor | Trabajo interrumpido exige preparación manual | Diseñar el flujo "reiniciar trabajo guardado" con verificación de `$G`/`$#` y origen | 🟡 Abierto |
 | R-19 | Si se pierde el USB durante la ejecución, el estado de ejecución no se limpia solo | UI mostrando «Ejecutando» con la máquina desconectada | Al pasar a `Disconnected`, cancelar suscripciones y marcar el trabajo como interrumpido | 🟡 Abierto |
+| R-20 | La consola evita las salvaguardas de la UI (solo restrictiva fuera de `Idle`) | Un comando manual puede mover la máquina sin comprobaciones | Se aceptan `$` siempre y el resto solo en `Idle`; documentado como vía avanzada | 🟡 Vigilado |
+| R-21 | `$X` sale de la alarma sin corregir la causa | Repetir el choque contra el tope o la pieza | Confirmación explícita con el aviso; el homing sigue siendo obligatorio antes de trabajar | 🟡 Vigilado |
 
 ---
 
 ## 8. Próximos pasos (orden estricto)
 
-1. **Prueba de banco (R-10)**: `flutter run -d windows` con Arduino + GRBL 1.1h; recorrer conexión → calibración → visor → ejecutar/pausar/reanudar y anotar resultados.
+1. **Re-verificar en banco** (`flutter run -d windows`): desconexión limpia (sin cierre), consola con `$$`/`?`, `$X` desde la alarma, soft reset, aviso de perfil al refrescar e «ir a 0,0».
 2. **Reiniciar trabajo guardado** (R-18): cargar el proyecto de la base y reenviar desde `ResumeState.lineIndex` con verificación de `$G`/`$#` y origen.
 3. **Limpieza ante desconexión** (R-19): cancelar suscripciones y marcar el trabajo como interrumpido.
 4. **M3.3 — CAM básico**: importar DXF/SVG, pestañas y mecanizado por pasadas reutilizando `BacklashCompensator`.
-5. **Alertas de pausa/detención** ampliadas con las tres consecuencias de `docs/seguridad_operativa.md` (hoy resumidas en el diálogo de detención).
-6. `CHANGELOG.md`, licencia y `NOTICE` con la atribución GPLv3 de GRBL.
-7. Push al remoto para ejecutar el CI (R-08).
+5. Push al remoto para ejecutar el CI (R-08).
 
 
 

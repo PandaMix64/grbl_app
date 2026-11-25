@@ -136,7 +136,20 @@ husillo y aplica su propio retardo, pero la app no debe depender de esa red de s
 
 ---
 
-## 7. Secuencia: Emergencia (paro físico)
+## 7. Comandos manuales (barra superior y consola)
+
+| Acción | Secuencia | Condiciones |
+| :--- | :--- | :--- |
+| Soft reset | `0x18` | Solo sin trabajo activo (con trabajo se usa «Detener» para persistir), confirmación explícita y aviso de que se pierde la posición |
+| Desbloquear | `$X` | Solo con la máquina en `Alarm`/`Door`; confirmación; **no** sustituye al homing |
+| Consola | una línea arbitraria | Los comandos que empiezan por `$` se aceptan en cualquier estado; el resto exige `Idle`; una línea por envío |
+
+**Prohibiciones:** usar el soft reset como pausa, enviar `$X` para «seguir trabajando» sin revisar la causa de la
+alarma y usar la consola para inyectar movimiento con un trabajo en curso.
+
+---
+
+## 8. Emergencia (paro físico)
 
 El paro de emergencia **nunca** es un botón de software. La UI debe indicar:
 
@@ -149,7 +162,7 @@ reanudación controlada y sin pérdida de posición.
 
 ---
 
-## 8. Máquina de estados de la UI
+## 9. Máquina de estados de la UI
 
 ```text
 Disconnected ──conectar──▶ Idle ◀────────────────────┐
@@ -177,7 +190,7 @@ Reglas:
 
 ---
 
-## 9. Criterios de aceptación (verificables en tests)
+## 10. Criterios de aceptación (verificables en tests)
 
 | ID | Criterio | Cubierto por |
 | :--- | :--- | :--- |
@@ -187,8 +200,9 @@ Reglas:
 | SEG-04 | `0x85` se envía solo si el estado reportado es `Jog`; en otro caso se registra y se ignora | tests *cancelar jog se ignora fuera del estado Jog* y *cancelar jog en Jog envía 0x85* |
 | SEG-05 | La reanudación falla de forma segura si `$G`/`$#` difieren de lo guardado | `ExecutionController.resume` compara `ParserState.isCompatibleWith` y `WorkOffsets.matches` antes de reanudar; tests *la reanudación se niega si el estado modal cambió* y *…si los offsets cambiaron* |
 | SEG-06 | El botón "Detener" exige confirmación y enumera las tres consecuencias del §5 | `ExecutionBar` pide confirmación y resume las consecuencias antes de `stop()`; test *la barra de ejecución aparece deshabilitada sin conexión* |
+| SEG-07 | El soft reset nunca sustituye a la pausa y se bloquea con un trabajo activo | `AppTopBar._softReset` rechaza el reset si `ExecutionUiState.isActive`; la consola solo deja pasar comandos no-`$` en `Idle` (test *rechaza comandos que no son de sistema fuera de Idle*) |
 
-### 9.1 Criterios de flujo de datos
+### 10.1 Criterios de flujo de datos
 
 | ID | Criterio | Cubierto por |
 | :--- | :--- | :--- |

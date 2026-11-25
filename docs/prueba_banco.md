@@ -105,7 +105,23 @@ caso: paro de emergencia físico, cerrar la app y anotar la secuencia exacta.
 | 7.3 | Programa con línea de más de 120 caracteres | Se rechaza antes de enviar con el número de línea |
 | 7.4 | Archivo de 20 000 líneas | Se envía sin desbordar el búfer (sin `error:`) y el progreso se mantiene fluido |
 
-## 8. Cierre
+## 9. Barra superior, consola y desconexión (S-09)
+
+| Paso | Acción | Esperado |
+| :--- | :--- | :--- |
+| 9.1 | Desconectar desde Inicio y volver a conectar | **Sin cierre de la app** ni diálogo del CRT; el puerto queda libre |
+| 9.2 | Abrir la consola y enviar `$$` | Lista de parámetros en la consola (`← $...`), sin telemetría intercalada |
+| 9.3 | Enviar `?` | La respuesta `<...>` **no** aparece (filtrada); el estado de la barra sí se actualiza |
+| 9.4 | Provocar una alarma (mover contra el tope con soft limits) y pulsar «Desbloquear» | Confirmación, `$X`, estado `Idle`; el origen sigue sin definir |
+| 9.5 | Con la máquina en `Run`, escribir `G0 X10` en la consola | Se rechaza con el aviso de Idle y no se envía nada |
+| 9.6 | Pulsar «Soft reset» sin trabajo | Confirmación, `0x18`, banner en la consola y estado `Alarm`/`Idle` |
+| 9.7 | Con un trabajo en curso, pulsar «Soft reset» | Se rechaza y remite a «Detener» (no se pierde el progreso) |
+| 9.8 | Refrescar `$$` con el perfil desactualizado | Aparece el icono de aviso en la barra con el detalle al pasar el ratón |
+| 9.9 | Cambiar de perfil desde la barra | El aviso se recalcula al instante |
+
+---
+
+## 10. Cierre
 
 - Volcar los resultados en `ESTADO_PROYECTO.md` (sección de riesgos: R-10, R-13, R-19).
 - Si todo pasa, cerrar R-10 y planificar el flujo «reiniciar trabajo guardado» (R-18).

@@ -134,7 +134,15 @@ permite pausar, reanudar y detener:
   No reenvía G-code: GRBL conserva su planificador.
 - **Detener** (`0x18`): pide confirmación con las consecuencias y resetea el controlador.
 
-## Persistencia
+## Barra superior
+
+Siempre visible: estado de la máquina, puerto, perfil activo (se puede cambiar sin ir a «Calibración»), aviso de
+discrepancias con la EEPROM, consola de comandos y accesos rápidos a `$X` (desbloquear) y soft reset.
+
+La consola muestra el tráfico real (`→` enviado, `←` recibido) **sin** telemetría ni la ráfaga de `ok`, guarda 400
+líneas con historial de comandos y permite enviar líneas sueltas: las que empiezan por `$` se aceptan siempre; el
+resto exige `Idle`. El soft reset pide confirmación y se rechaza si hay un trabajo en curso («Detener» guarda el
+progreso antes).
 
 Los perfiles, proyectos y archivos recientes viven en SQLite (drift). El esquema está en `lib/data/database/app_database.dart` y **el código generado se versiona**, así que un clon nuevo compila sin pasos extra:
 
