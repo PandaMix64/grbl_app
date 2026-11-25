@@ -29,6 +29,7 @@ class ConnectionUiState {
     this.error,
     this.lastMessage,
     this.workPosition,
+    this.positionIsLive = false,
   });
 
   final List<SerialPortInfo> ports;
@@ -46,7 +47,16 @@ class ConnectionUiState {
 
   final String? error;
   final String? lastMessage;
+
+  /// Última posición de trabajo conocida.
+  ///
+  /// GRBL no incluye `WCO` en todos los reportes (`$10` y cambio de offset), así
+  /// que la posición se guarda y se refresca con cada lectura: borrarla dejaba
+  /// el cabezal del visor y el origen sin datos casi todo el tiempo.
   final List<double>? workPosition;
+
+  /// `true` si [workPosition] viene del reporte más reciente.
+  final bool positionIsLive;
 
   /// `true` si alguna discrepancia impide ejecutar trabajo.
   bool get hasBlockingIssues => ProfileConsistency.hasBlocking(issues);
@@ -63,8 +73,8 @@ class ConnectionUiState {
     String? error,
     String? lastMessage,
     List<double>? workPosition,
+    bool? positionIsLive,
     bool clearError = false,
-    bool clearWorkPosition = false,
     bool clearHandshake = false,
   }) {
     return ConnectionUiState(
@@ -78,9 +88,8 @@ class ConnectionUiState {
       issues: issues ?? this.issues,
       error: clearError ? null : (error ?? this.error),
       lastMessage: lastMessage ?? this.lastMessage,
-      workPosition: clearWorkPosition
-          ? null
-          : (workPosition ?? this.workPosition),
+      workPosition: workPosition ?? this.workPosition,
+      positionIsLive: positionIsLive ?? this.positionIsLive,
     );
   }
 }
@@ -90,6 +99,13 @@ class ConnectionUiState {
 class ConnectionController extends Notifier<ConnectionUiState> {
   StreamSubscription<StatusReport>? _statusSub;
   StreamSubscription<String>? _messageSub;
+
+  /// Último `WCO` conocido, para resolver `WPos = MPos - WCO` cuando GRBL no lo
+  /// incluye en el reporte.
+  List<double>? _lastWco;
+
+  /// Última posición de trabajo válida, conservada entre reportes.
+  List<double>? _lastWorkPosition;
 
   @override
   ConnectionUiState build() {
@@ -146,16 +162,15 @@ class ConnectionController extends Notifier<ConnectionUiState> {
       );
       await client.startPolling();
 
-      _statusSub = client.statusReports.listen((StatusReport report) {
-        state = state.copyWith(
-          machineState: report.state,
-          workPosition: report.resolvedWorkPosition,
-          clearWorkPosition: report.resolvedWorkPosition == null,
-        );
-      });
+      _statusSub = client.statusReports.listen(_onStatusReport);
       _messageSub = client.messages.listen((String message) {
         state = state.copyWith(lastMessage: message);
       });
+
+      // Semilla del `WCO` con el `$#` del handshake (G54): el primer reporte
+      // puede venir sin `WCO` y aun así resolverse.
+      _lastWorkPosition = null;
+      _lastWco = handshake.offsets['G54'];
 
       final List<ConsistencyIssue> issues = profile == null
           ? const <ConsistencyIssue>[]
@@ -203,6 +218,36 @@ class ConnectionController extends Notifier<ConnectionUiState> {
     );
   }
 
+  /// Refresca el estado y la posición con un status report.
+  ///
+  /// GRBL omite `WCO` en la mayoría de reportes, así que se memoriza el último
+  /// para resolver `WPos = MPos - WCO`. Si el reporte no trae posición alguna se
+  /// conserva la última conocida en lugar de borrarla: el cabezal del visor y el
+  /// cero de trabajo necesitan ese dato de forma continua.
+  void _onStatusReport(StatusReport report) {
+    final List<double>? wco = report.workCoordinateOffset;
+    if (wco != null && wco.length >= 2) {
+      _lastWco = wco;
+    }
+    List<double>? resolved = report.resolvedWorkPosition;
+    final List<double>? machine = report.machinePosition;
+    final List<double>? offset = _lastWco;
+    if (resolved == null && machine != null && offset != null) {
+      resolved = <double>[
+        for (int i = 0; i < machine.length; i++)
+          machine[i] - (i < offset.length ? offset[i] : 0.0),
+      ];
+    }
+    if (resolved != null) {
+      _lastWorkPosition = resolved;
+    }
+    state = state.copyWith(
+      machineState: report.state,
+      workPosition: _lastWorkPosition,
+      positionIsLive: resolved != null,
+    );
+  }
+
   /// Cierra el puerto y detiene la telemetría.
   Future<void> disconnect() async {
     state = state.copyWith(isBusy: true, clearError: true);
@@ -221,6 +266,8 @@ class ConnectionController extends Notifier<ConnectionUiState> {
       selectedPort: state.selectedPort,
       baudRate: state.baudRate,
     );
+    _lastWco = null;
+    _lastWorkPosition = null;
   }
 }
 

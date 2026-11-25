@@ -149,7 +149,8 @@ class _ConnectionBarState extends ConsumerState<ConnectionBar> {
         Padding(
           padding: const EdgeInsets.only(top: 4),
           child: Text(
-            'WPos: ${position[0].toStringAsFixed(3)}, '
+            'WPos ${state.positionIsLive ? '' : '(última lectura) '}'
+            '${position[0].toStringAsFixed(3)}, '
             '${position[1].toStringAsFixed(3)}, '
             '${position[2].toStringAsFixed(3)} mm',
             style: theme.textTheme.bodySmall,

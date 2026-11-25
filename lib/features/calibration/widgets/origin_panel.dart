@@ -146,7 +146,7 @@ class _OriginPanelState extends ConsumerState<OriginPanel> {
             if (connection.workPosition != null &&
                 connection.workPosition!.length >= 3)
               Text(
-                'WPos actual: '
+                'WPos ${connection.positionIsLive ? 'actual' : '(última lectura)'}: '
                 '${connection.workPosition![0].toStringAsFixed(2)}, '
                 '${connection.workPosition![1].toStringAsFixed(2)}, '
                 '${connection.workPosition![2].toStringAsFixed(2)} mm',

@@ -161,7 +161,9 @@ class StatusReport {
     final List<double> parsed = <double>[];
     for (final String part in parts) {
       final double? number = double.tryParse(part.trim());
-      if (number == null) {
+      // `double.tryParse` acepta "NaN"/"Infinity": un valor no finito rompería
+      // el pintado del visor y la comparación con el volumen de trabajo.
+      if (number == null || !number.isFinite) {
         return null;
       }
       parsed.add(number);
