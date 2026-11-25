@@ -38,6 +38,15 @@ class ActiveProfileId extends Notifier<String?> {
 final NotifierProvider<ActiveProfileId, String?> activeProfileIdProvider =
     NotifierProvider<ActiveProfileId, String?>(ActiveProfileId.new);
 
+/// Lista de perfiles guardados (barra superior y calibración).
+///
+/// Se invalida al crear, editar o borrar un perfil para que el selector de la
+/// barra superior se mantenga al día.
+final FutureProvider<List<MachineProfile>> profilesProvider =
+    FutureProvider<List<MachineProfile>>((Ref ref) async {
+      return ref.watch(databaseProvider).allProfiles();
+    });
+
 /// Perfil activo resuelto desde la base de datos.
 ///
 /// Si el id guardado ya no existe, cae al perfil actualizado más recientemente.

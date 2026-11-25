@@ -4,6 +4,7 @@ import '../features/calibration/calibration_page.dart';
 import '../features/cam/cam_page.dart';
 import '../features/home/home_page.dart';
 import '../features/viewer/viewer_page.dart';
+import 'widgets/app_top_bar.dart';
 
 /// Ancho a partir del cual se usa [NavigationRail] (escritorio) en lugar de
 /// [NavigationBar] (móvil). Coincide con el punto de corte de Material 3 para
@@ -57,48 +58,52 @@ class _HomeShellState extends State<HomeShell> {
 
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        if (constraints.maxWidth >= kRailBreakpoint) {
-          return Scaffold(
-            body: Row(
-              children: <Widget>[
-                NavigationRail(
+        final bool wide = constraints.maxWidth >= kRailBreakpoint;
+        return Scaffold(
+          body: Column(
+            children: <Widget>[
+              const AppTopBar(),
+              const Divider(height: 1),
+              Expanded(
+                child: wide
+                    ? Row(
+                        children: <Widget>[
+                          NavigationRail(
+                            selectedIndex: _selectedIndex,
+                            onDestinationSelected: _onDestinationSelected,
+                            labelType: NavigationRailLabelType.all,
+                            destinations: <NavigationRailDestination>[
+                              for (final _Destination destination
+                                  in _destinations)
+                                NavigationRailDestination(
+                                  icon: Icon(destination.icon),
+                                  selectedIcon: Icon(destination.selectedIcon),
+                                  label: Text(destination.label),
+                                ),
+                            ],
+                          ),
+                          const VerticalDivider(width: 1),
+                          Expanded(child: body),
+                        ],
+                      )
+                    : body,
+              ),
+            ],
+          ),
+          bottomNavigationBar: wide
+              ? null
+              : NavigationBar(
                   selectedIndex: _selectedIndex,
                   onDestinationSelected: _onDestinationSelected,
-                  labelType: NavigationRailLabelType.all,
-                  leading: const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    child: Icon(Icons.precision_manufacturing_outlined),
-                  ),
-                  destinations: <NavigationRailDestination>[
+                  destinations: <NavigationDestination>[
                     for (final _Destination destination in _destinations)
-                      NavigationRailDestination(
+                      NavigationDestination(
                         icon: Icon(destination.icon),
                         selectedIcon: Icon(destination.selectedIcon),
-                        label: Text(destination.label),
+                        label: destination.label,
                       ),
                   ],
                 ),
-                const VerticalDivider(width: 1),
-                Expanded(child: body),
-              ],
-            ),
-          );
-        }
-
-        return Scaffold(
-          body: body,
-          bottomNavigationBar: NavigationBar(
-            selectedIndex: _selectedIndex,
-            onDestinationSelected: _onDestinationSelected,
-            destinations: <NavigationDestination>[
-              for (final _Destination destination in _destinations)
-                NavigationDestination(
-                  icon: Icon(destination.icon),
-                  selectedIcon: Icon(destination.selectedIcon),
-                  label: destination.label,
-                ),
-            ],
-          ),
         );
       },
     );
