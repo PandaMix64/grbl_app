@@ -535,6 +535,36 @@ Recuperación de la sesión: `git log --oneline --grep="S-09"`.
 
 ---
 
+### S-11 — 2026-11-24 · Reinicio de trabajos guardados e interrupción segura (M3.5)
+
+**Alcance:** cerrar R-18 (retomar un trabajo tras pausa, detención o pérdida de enlace) y R-19 (limpieza de la ejecución al desconectar), sin repetir tramo ya ejecutado.
+
+**Entregado**
+
+| # | Cambio | Archivo(s) | Estado |
+| :--- | :--- | :--- | :--- |
+| 1 | `ExecutionStatus.interrupted` y detección de enlace perdido con trabajo activo | `lib/features/viewer/execution_controller.dart` | ✅ |
+| 2 | `markProjectInterrupted` en la base de datos | `lib/data/database/app_database.dart` | ✅ |
+| 3 | `resumableProjectProvider`: último trabajo con punto de reanudación | `lib/app/providers.dart` | ✅ |
+| 4 | `start(resumeFromLine:, projectId:)`: envía desde la línea guardada y reutiliza la fila | `execution_controller.dart` | ✅ |
+| 5 | `restartFromSaved()`: `$G`/`$#` (SEG-05) + distancia al punto guardado (≤ 1 mm) | `execution_controller.dart` | ✅ |
+| 6 | `jogToWorkPosition`: mover al punto guardado con `$J=` desde `WPos` | `lib/features/calibration/calibration_controller.dart` | ✅ |
+| 7 | Botones «Reanudar trabajo guardado» y «Llevar al punto guardado» con confirmación | `lib/features/viewer/widgets/execution_bar.dart` | ✅ |
+| 8 | 5 pruebas nuevas (204 en verde, 1 saltada) | `test/features/execution_restart_test.dart` | ✅ |
+
+**Verificaciones ejecutadas:** `dart format --set-exit-if-changed` → 0 cambios · `flutter analyze` → *No issues found* · `flutter test` → **204 en verde, 1 saltada**.
+
+**Decisiones de diseño**
+
+- Reiniciar **reenvía** el programa desde la línea confirmada (no usa `~`): tras un `stop` el planificador está vacío y el bloque guardado puede no haberse ejecutado.
+- Se exige que la máquina esté a ≤ 1 mm del punto guardado: la app no mueve la máquina por su cuenta, solo ofrece «Llevar al punto guardado».
+- Perder el enlace **no** borra el progreso: el proyecto pasa a `interrupted` y el punto guardado sigue disponible.
+- `executedLine` arranca en `lineIndex - 1` para que el visor pinte lo ya hecho sin saltos.
+
+**Decisiones tomadas:** ADR-033, ADR-034.
+
+---
+
 ## 5. Decisiones de arquitectura (ADR resumidas)
 
 | ID | Decisión | Motivo | Consecuencia |
@@ -571,6 +601,8 @@ Recuperación de la sesión: `git log --oneline --grep="S-09"`.
 | ADR-030 | Barra superior persistente con estado, perfil, consola, `$X` y soft reset | El operario necesita estado y salida de emergencia desde cualquier módulo | Vive fuera del enrutador; el soft reset se rechaza si hay trabajo activo |
 | ADR-031 | La posición de trabajo se retiene entre reportes y se resuelve con el último `WCO` | GRBL omite `WCO` casi siempre: borrar la posición dejaba el cabezal y el origen sin datos | `positionIsLive` marca cuándo el dato viene del reporte actual |
 | ADR-032 | El lienzo expone `resetView()` y se reencuadra al cambiar de programa | Un paneo viejo deja el trazado fuera del viewport sin forma de volver | Clave en un `Provider`; `RepaintBoundary` para que el paneo no repinte los lotes |
+| ADR-033 | Reiniciar un trabajo guardado reenvía desde la línea confirmada, con `$G`/`$#` y distancia ≤ 1 mm como precondiciones | Tras `stop` el planificador está vacío: `~` no continúa nada y el bloque guardado puede no haberse ejecutado | La app no mueve sola: ofrece «Llevar al punto guardado» para que el operario confirme |
+| ADR-034 | Perder el enlace con trabajo activo marca `interrupted` y conserva el punto de reanudación | El estado de la máquina es incierto pero el progreso guardado sigue siendo válido | Se cancelan suscripciones y el proyecto pasa a `interrupted` en SQLite |
 
 ---
 
@@ -606,8 +638,8 @@ Recuperación de la sesión: `git log --oneline --grep="S-09"`.
 | R-15 | El perfil activo aún no se aplica a la conexión ni al post-procesado | Cambios de perfil no afectan a la ejecución | Cerrado en S-06: perfil compartido, comparado al conectar y aplicable a la EEPROM | ✅ Cerrado |
 | R-16 | La compensación de holgura no cubre arcos ni el eje Z, y todavía no se aplica al ejecutar | Desviación residual en contornos con arcos | Cerrado en S-08: `ExecutionController` compensa antes de enviar y cuenta las inyecciones | ✅ Cerrado |
 | R-17 | El intérprete es síncrono: un archivo de 100 000 líneas puede congelar la UI | Mala experiencia con trabajos grandes | Mover el parseo a un isolate (Fase 5 o antes si se nota) | 🟡 Vigilado |
-| R-18 | Tras **detener** no se ofrece reanudar: hace falta re-homing y reenviar desde el visor | Trabajo interrumpido exige preparación manual | Diseñar el flujo "reiniciar trabajo guardado" con verificación de `$G`/`$#` y origen | 🟡 Abierto |
-| R-19 | Si se pierde el USB durante la ejecución, el estado de ejecución no se limpia solo | UI mostrando «Ejecutando» con la máquina desconectada | Al pasar a `Disconnected`, cancelar suscripciones y marcar el trabajo como interrumpido | 🟡 Abierto |
+| R-18 | Tras **detener** no se ofrece reanudar: hace falta re-homing y reenviar desde el visor | Trabajo interrumpido exige preparación manual | Cerrado en S-11: «Reanudar trabajo guardado» verifica `$G`/`$#` y el punto guardado (≤ 1 mm) antes de reenviar desde la línea | ✅ Cerrado |
+| R-19 | Si se pierde el USB durante la ejecución, el estado de ejecución no se limpia solo | UI mostrando «Ejecutando» con la máquina desconectada | Cerrado en S-11: al desconectar se cancela la ejecución, el proyecto pasa a `interrupted` y se conserva el punto de reanudación | ✅ Cerrado |
 | R-20 | La consola evita las salvaguardas de la UI (solo restrictiva fuera de `Idle`) | Un comando manual puede mover la máquina sin comprobaciones | Se aceptan `$` siempre y el resto solo en `Idle`; documentado como vía avanzada | 🟡 Vigilado |
 | R-21 | `$X` sale de la alarma sin corregir la causa | Repetir el choque contra el tope o la pieza | Confirmación explícita con el aviso; el homing sigue siendo obligatorio antes de trabajar | 🟡 Vigilado |
 
@@ -615,11 +647,9 @@ Recuperación de la sesión: `git log --oneline --grep="S-09"`.
 
 ## 8. Próximos pasos (orden estricto)
 
-1. **Completar la verificación en banco**: 5.6 (reanudar sin repetir tramo), 5.7 (detener), §6 (divergencia de reanudación) y las pruebas de robustez §7–§9.
-2. **Reiniciar trabajo guardado** (R-18): cargar el proyecto de la base y reenviar desde `ResumeState.lineIndex` con verificación de `$G`/`$#` y origen.
-3. **Limpieza ante desconexión** (R-19): cancelar suscripciones y marcar el trabajo como interrumpido.
-4. **M3.3 — CAM básico**: importar DXF/SVG, pestañas y mecanizado por pasadas reutilizando `BacklashCompensator`.
-5. Push al remoto para ejecutar el CI (R-08).
+1. **Completar la verificación en banco**: 5.6 (reanudar sin repetir tramo), 5.7 (detener), §6 (divergencia de reanudación), reinicio del trabajo guardado (§11) y robustez §7–§9.
+2. **M3.3 — CAM básico**: importar DXF/SVG, pestañas y mecanizado por pasadas reutilizando `BacklashCompensator`.
+3. Push al remoto para ejecutar el CI (R-08).
 
 
 

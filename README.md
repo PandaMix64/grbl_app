@@ -135,6 +135,9 @@ permite pausar, reanudar y detener:
 - **Reanudar**: verifica `$G`/`$#` contra lo guardado, reactiva la herramienta con `0x9E` y envía `~`.
   No reenvía G-code: GRBL conserva su planificador.
 - **Detener** (`0x18`): pide confirmación con las consecuencias y resetea el controlador.
+- **Reanudar trabajo guardado**: tras una pausa, una detención o una pérdida de USB, retoma el trabajo desde su
+  última línea confirmada. Verifica `$G`/`$#` contra lo guardado y exige que la máquina esté a ≤ 1 mm del punto
+  guardado (botón **Llevar al punto guardado**); si algo no coincide, se cancela en lugar de arriesgar la pieza.
 
 ## Barra superior
 

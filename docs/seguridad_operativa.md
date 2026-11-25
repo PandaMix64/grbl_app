@@ -131,8 +131,9 @@ Detener envía `0x18`, así que la posición y el estado del parser se pierden. 
 **Nunca** reanudar con `~` sin reactivar la herramienta antes: GRBL restaura el estado previo del
 husillo y aplica su propio retardo, pero la app no debe depender de esa red de seguridad.
 
-> Estado actual: 6.1 está implementada y probada. 6.2 está documentada pero la UI aún no la ofrece
-> (riesgo R-18): tras «Detener» hay que volver a preparar la máquina y reenviar desde el visor.
+> Estado actual: 6.1 está implementada y probada. 6.2 está implementada desde S-11 en forma de
+> «Reanudar trabajo guardado»: exige `$G`/`$#` compatibles y estar a ≤ 1 mm del punto guardado, recarga el
+> programa y lo reenvía desde la línea confirmada. Queda probarla en hardware (§11 de la guía).
 
 ---
 

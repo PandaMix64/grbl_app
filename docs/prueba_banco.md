@@ -124,7 +124,23 @@ caso: paro de emergencia físico, cerrar la app y anotar la secuencia exacta.
 
 ---
 
-## 10. Cierre
+## 11. Reiniciar un trabajo guardado (S-11)
+
+Requisitos previos: máquina encendida y conectada, **homing hecho**, misma pieza y mismo cero de trabajo,
+herramienta montada.
+
+| Paso | Acción | Esperado |
+| :--- | :--- | :--- |
+| 11.1 | Pausar un trabajo, desconectar el USB y volver a conectar | El visor muestra «Interrumpido» y el proyecto queda como `interrupted`; el punto de reanudación sigue ahí |
+| 11.2 | Pulsar «Reanudar trabajo guardado» | Diálogo con nombre, línea y punto guardado; al aceptar, verifica `$G`/`$#` |
+| 11.3 | Con la máquina lejos del punto guardado | Se niega e indica la distancia; usa «Llevar al punto guardado» |
+| 11.4 | «Llevar al punto guardado» | Movimiento `$J=` hasta el punto y vuelta a `Idle` |
+| 11.5 | Reanudar tras colocarla | Envía **desde** la línea confirmada: no debe repetir el tramo previo ni saltarse ninguno |
+| 11.6 | Cambiar el cero de trabajo (`G10 L20 P1`) y reanudar | Se niega por offsets distintos |
+
+---
+
+## 12. Cierre
 
 - Volcar los resultados en `ESTADO_PROYECTO.md` (sección de riesgos: R-10, R-13, R-19).
 - Si todo pasa, cerrar R-10 y planificar el flujo «reiniciar trabajo guardado» (R-18).
