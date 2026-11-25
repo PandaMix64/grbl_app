@@ -501,6 +501,40 @@ Recuperación de la sesión: `git log --oneline --grep="S-09"`.
 
 ---
 
+### S-10 — 2026-11-24 · Telemetría persistente y encuadre del visor (M3.4)
+
+**Alcance:** corregir la desaparición de la posición (cabezal 3D y cero de trabajo) y dar control de encuadre al visor; la ejecución desde el visor quedó validada en banco hasta 5.5.
+
+**Hallazgos**
+
+| # | Observación | Causa | Resolución |
+| :--- | :--- | :--- | :--- |
+| 1 | La posición desaparecía casi al instante | GRBL omite `WCO` en la mayoría de reportes y el controlador **borraba** `workPosition` cuando no podía resolver `WPos` | Se memoriza el último `WCO` y se conserva la última posición válida |
+| 2 | Difícil posicionar en el origen sin datos de posición | Consecuencia de (1) | La UI mantiene el WPos y marca «(última lectura)» en lugar de vaciar |
+| 3 | El visor quedaba «atorado» si el trazado salía del viewport | No había forma de reencuadrar y el paneo sobrevivía al cambio de programa | Botón «Centrar trazado», encuadre automático al cargar y `RepaintBoundary` |
+
+**Entregado**
+
+| # | Cambio | Archivo(s) | Estado |
+| :--- | :--- | :--- | :--- |
+| 1 | `_onStatusReport` con `WCO` memorizado, posición persistente y `positionIsLive` | `lib/features/connection/connection_controller.dart` | ✅ |
+| 2 | Semilla del `WCO` con `G54` del handshake | `connection_controller.dart` | ✅ |
+| 3 | Descarte de valores no finitos (`NaN`/`Infinity`) en la telemetría | `lib/domain/entities/status_report.dart` | ✅ |
+| 4 | «Centrar trazado», encuadre automático y capa de repintado | `lib/features/viewer/{viewer_page,viewer_canvas}.dart` | ✅ |
+| 5 | 3 pruebas nuevas (199 en verde, 1 saltada) | `test/features/connection_telemetry_test.dart`, `test/widget_test.dart` | ✅ |
+
+**Verificaciones ejecutadas:** `dart format --set-exit-if-changed` → 0 cambios · `flutter analyze` → *No issues found* · `flutter test` → **199 en verde, 1 saltada**.
+
+**Decisiones de diseño**
+
+- La posición de trabajo es un **estado retenido**: solo el handshake (al conectar) y la desconexión la reinician.
+- `positionIsLive` distingue «viene de este reporte» de «última conocida» sin mentir al operario.
+- El paneo/zoom **no** se conserva entre programas: un archivo nuevo siempre entra encuadrado.
+
+**Decisiones tomadas:** ADR-031, ADR-032.
+
+---
+
 ## 5. Decisiones de arquitectura (ADR resumidas)
 
 | ID | Decisión | Motivo | Consecuencia |
@@ -535,6 +569,8 @@ Recuperación de la sesión: `git log --oneline --grep="S-09"`.
 | ADR-028 | `port.config` es propiedad del `SerialPort`; el lector se drena antes de liberar el puerto | Liberar el config otra vez es doble `free` (aborta en debug) y liberar el puerto con el lector en `sp_wait` es `use-after-free` | `close()` espera 150 ms tras cerrar el lector (timeout 50 ms) |
 | ADR-029 | La consola acepta comandos `$` siempre; el resto solo en `Idle` | Es la única vía que evita las salvaguardas de la UI sin exponer la máquina a movimiento accidental | El servicio lanza `GrblSafetyException`; la UI lo muestra y no envía nada |
 | ADR-030 | Barra superior persistente con estado, perfil, consola, `$X` y soft reset | El operario necesita estado y salida de emergencia desde cualquier módulo | Vive fuera del enrutador; el soft reset se rechaza si hay trabajo activo |
+| ADR-031 | La posición de trabajo se retiene entre reportes y se resuelve con el último `WCO` | GRBL omite `WCO` casi siempre: borrar la posición dejaba el cabezal y el origen sin datos | `positionIsLive` marca cuándo el dato viene del reporte actual |
+| ADR-032 | El lienzo expone `resetView()` y se reencuadra al cambiar de programa | Un paneo viejo deja el trazado fuera del viewport sin forma de volver | Clave en un `Provider`; `RepaintBoundary` para que el paneo no repinte los lotes |
 
 ---
 
@@ -562,7 +598,7 @@ Recuperación de la sesión: `git log --oneline --grep="S-09"`.
 | R-07 | `LibSerialPortRepository` sin implementar: la app aún no habla con hardware | Fase 1 detenida hasta implementarlo | Implementado en S-03 (FFI + worker con handshake); queda la prueba en banco (R-10) | 🟢 Cerrado |
 | R-08 | CI escrito pero nunca ejecutado en GitHub | Errores de entorno no detectados | Primer push y revisión del run | 🟡 Abierto |
 | R-09 | `GrblSerialService` mezcla transporte y política de seguridad | Mantenibilidad | Extraer `SafetyController` antes de la UI de calibración | 🟡 Vigilado |
-| R-10 | El camino FFI (DLL + handshake) no se ha ejecutado contra hardware ni en un build de escritorio | Fallos de plataforma no detectados hasta la primera prueba real | Primera pasada real en S-09: conexión, handshake, EEPROM, jog, holgura y origen OK; el cierre al desconectar se corrigió (ADR-028) y falta re-verificarlo | 🟡 En verificación |
+| R-10 | El camino FFI (DLL + handshake) no se ha ejecutado contra hardware ni en un build de escritorio | Fallos de plataforma no detectados hasta la primera prueba real | Probado en S-09/S-10: conexión, EEPROM, jog, holgura, origen y ejecución (5.1–5.5) OK; el cierre al desconectar se corrigió y falta confirmarlo con 5.6–5.7 y las pruebas de robustez | 🟡 En verificación |
 | R-11 | Sin reconexión automática tras una pérdida de USB | Trabajo interrumpido y estado perdido | Detectar error de puerto, marcar `Disconnected` y exigir reconexión con handshake | 🟡 Vigilado |
 | R-12 | La persistencia (Drift) aún no existe: `persistProgress` solo puede confirmar de memoria | El ack de SEG-03 no garantiza durabilidad todavía | Cerrado en S-04: `ProjectRepository.persistAndConfirm` escribe en SQLite antes de confirmar | ✅ Cerrado |
 | R-13 | La conexión desde la UI se cubre en tests de controlador, no con un widget test que pulse «Conectar» | Un fallo de cableado UI ↔ controlador no se detectaría en CI | Prueba E2E en build con hardware (R-10) y revisión manual al integrar la Fase 2 | 🟡 Vigilado |
@@ -579,7 +615,7 @@ Recuperación de la sesión: `git log --oneline --grep="S-09"`.
 
 ## 8. Próximos pasos (orden estricto)
 
-1. **Re-verificar en banco** (`flutter run -d windows`): desconexión limpia (sin cierre), consola con `$$`/`?`, `$X` desde la alarma, soft reset, aviso de perfil al refrescar e «ir a 0,0».
+1. **Completar la verificación en banco**: 5.6 (reanudar sin repetir tramo), 5.7 (detener), §6 (divergencia de reanudación) y las pruebas de robustez §7–§9.
 2. **Reiniciar trabajo guardado** (R-18): cargar el proyecto de la base y reenviar desde `ResumeState.lineIndex` con verificación de `$G`/`$#` y origen.
 3. **Limpieza ante desconexión** (R-19): cancelar suscripciones y marcar el trabajo como interrumpido.
 4. **M3.3 — CAM básico**: importar DXF/SVG, pestañas y mecanizado por pasadas reutilizando `BacklashCompensator`.

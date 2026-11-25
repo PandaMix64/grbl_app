@@ -87,6 +87,9 @@ G1 Z0
 `!`, aparecen líneas duplicadas al reanudar o el estado de la UI no coincide con la máquina. En ese
 caso: paro de emergencia físico, cerrar la app y anotar la secuencia exacta.
 
+> **Estado de la última pasada (2026-11-24):** 5.1–5.5 correctos. 5.6 y 5.7 quedan pendientes, igual
+> que §6–§9.
+
 ## 6. Divergencia de reanudación (SEG-05)
 
 1. Ejecutar y pausar.

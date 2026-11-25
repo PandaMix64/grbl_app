@@ -120,6 +120,8 @@ El módulo de Calibración permite:
 `Visor` interpreta G-code (`G0`/`G1`/`G2`/`G3` con `I`/`J` o `R`, `G90`/`G91`, `G20`/`G21`) y lo dibuja con `CustomPainter` en tres lotes: rápido, pendiente y ejecutado. El cabezal se sincroniza con la telemetría y el volumen de trabajo sale del perfil activo.
 
 - Arrastrar desplaza, pellizcar/rueda acerca, girar rota y doble toque restablece la vista.
+- El botón **Centrar trazado** reencuadra el programa (y al cargar un archivo nuevo el encuadre es automático).
+- El cabezal usa la **última posición conocida**: GRBL omite `WCO` en la mayoría de reportes, así que la app memoriza el offset y conserva el WPos en lugar de borrarlo. Si un reporte no trae posición, la barra y el panel de origen lo indican como «(última lectura)».
 - Los códigos que cambian el sistema de coordenadas (`G28`, `G30`, `G53`, `G92`) **no se simulan**: se muestran como avisos.
 
 ## Ejecución
