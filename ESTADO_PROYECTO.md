@@ -381,6 +381,16 @@ Recuperación de la sesión: `git log --oneline --grep="S-06"`.
 
 **Decisiones tomadas:** ADR-022, ADR-023.
 
+**Trazabilidad (commits de S-07):**
+
+| Hash | Commit |
+| :--- | :--- |
+| `35395a0` | `feat(domain): interprete de G-code con arcos y programa simulado` |
+| `e77818a` | `feat(viewer): proyeccion, pintor por lotes y visor 3D` |
+| `0526325` | `docs: cierra M3.1 con el visor documentado` |
+
+Recuperación de la sesión: `git log --oneline --grep="S-07"`.
+
 **Abierto al cierre:** ejecución desde el visor, pausa/reanudación y el parseo asíncrono para archivos grandes (R-17).
 
 ---
