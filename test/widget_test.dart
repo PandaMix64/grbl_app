@@ -85,4 +85,23 @@ void main() {
     expect(find.text('Pasos por milímetro'), findsOneWidget);
     expect(find.text('Perfiles de máquina'), findsOneWidget);
   });
+
+  testWidgets('el visor carga el ejemplo y dibuja el lienzo', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(buildApp());
+    await settle(tester);
+
+    await tester.tap(find.text('Visor').first);
+    await tester.pump();
+
+    expect(find.textContaining('Abre un archivo'), findsOneWidget);
+
+    await tester.tap(find.text('Ejemplo'));
+    await tester.pump();
+
+    expect(find.byKey(const Key('viewer-canvas')), findsOneWidget);
+    expect(find.textContaining('arcos'), findsOneWidget);
+    expect(find.textContaining('segmentos'), findsOneWidget);
+  });
 }
