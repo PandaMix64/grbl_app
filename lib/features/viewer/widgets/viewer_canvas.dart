@@ -47,18 +47,21 @@ class ViewerCanvasState extends ConsumerState<ViewerCanvas> {
   double _zoomStart = 1;
   double _yawStart = -30;
 
-  /// Búfer proyectado de toda la trayectoria (4 flotantes por segmento) y la
-  /// proyección con la que se construyó. Se reutiliza mientras no cambie ni el
-  /// programa ni la vista, así que la estela del simulador se dibuja sin recorrer
-  /// los segmentos en cada fotograma.
+  /// Proyección cacheada: puntos para la estela y lotes para la trayectoria.
+  ///
+  /// Se recalcula solo cuando cambia el programa, la vista o la línea ejecutada;
+  /// mientras la simulación avanza, repintar cuesta O(1) (prefijo del búfer) en
+  /// lugar de recorrer todos los segmentos en cada fotograma.
   Float32List? _projected;
-  GcodeProgram? _projectedProgram;
-  double _projectedScale = 0;
-  double _projectedYaw = 0;
-  double _projectedPitch = 0;
-  double _projectedCenterX = 0;
-  double _projectedCenterY = 0;
-  double _projectedCenterZ = 0;
+  ProgramBatches? _batches;
+  GcodeProgram? _cachedProgram;
+  double _cachedScale = 0;
+  double _cachedYaw = 0;
+  double _cachedPitch = 0;
+  double _cachedCenterX = 0;
+  double _cachedCenterY = 0;
+  double _cachedCenterZ = 0;
+  int? _cachedExecutedLine;
 
   /// Devuelve la vista a encuadre inicial (zoom, paneo y giro).
   void resetView() {
@@ -110,6 +113,12 @@ class ViewerCanvasState extends ConsumerState<ViewerCanvas> {
       ),
     );
     final PreviewVisibility visibility = ref.watch(previewVisibilityProvider);
+    // Solo se desactiva la caché de ráster mientras hay animación en marcha.
+    final bool simulating = ref.watch(
+      simulationControllerProvider.select(
+        (SimulationUiState state) => state.playing,
+      ),
+    );
 
     final Vector3 center = _center(program);
     final Vector3 size = _size(program);
@@ -129,6 +138,10 @@ class ViewerCanvasState extends ConsumerState<ViewerCanvas> {
           yawDegrees: _yaw,
           pitchDegrees: _pitch,
         );
+        final int? executedLine = visibility.showExecution
+            ? widget.executedUpToLine
+            : null;
+        _ensureProjection(program, projection, executedLine);
         final SimulationTrail? trail = visibility.showSimulation
             ? _trail(program, projection, cursor)
             : null;
@@ -147,17 +160,16 @@ class ViewerCanvasState extends ConsumerState<ViewerCanvas> {
                 key: const Key('viewer-canvas'),
                 size: viewport,
                 isComplex: true,
-                willChange: trail != null,
+                willChange: simulating,
                 painter: ProgramPainter(
                   program: program,
                   projection: projection,
                   colorScheme: theme.colorScheme,
+                  batches: _batches,
                   headPosition: visibility.showExecution
                       ? widget.headPosition
                       : null,
-                  executedUpToLine: visibility.showExecution
-                      ? widget.executedUpToLine
-                      : null,
+                  executedUpToLine: executedLine,
                   workAreaMm: widget.workAreaMm,
                   gridStepMm: _gridStep(size),
                 ),
@@ -176,13 +188,16 @@ class ViewerCanvasState extends ConsumerState<ViewerCanvas> {
   }
 
   /// Estela hasta el cabezal simulado, en coordenadas de pantalla.
-  SimulationTrail _trail(
+  SimulationTrail? _trail(
     GcodeProgram program,
     ViewProjection projection,
     SimulationCursor? cursor,
   ) {
-    final Float32List points = _projectedPoints(program, projection);
-    if (cursor == null || program.segments.isEmpty) {
+    final Float32List? points = _projected;
+    if (points == null || program.segments.isEmpty) {
+      return null;
+    }
+    if (cursor == null) {
       return SimulationTrail(points: points, segmentsDone: 0);
     }
     final int index = cursor.segmentIndex.clamp(0, program.segments.length - 1);
@@ -197,25 +212,34 @@ class ViewerCanvasState extends ConsumerState<ViewerCanvas> {
     );
   }
 
-  /// Búfer plano `[ax, ay, bx, by]` por segmento; recalculado solo si cambia el
-  /// programa o la vista.
-  Float32List _projectedPoints(
+  /// Proyecta el programa una sola vez por vista: búfer plano para la estela
+  /// (`ax, ay, bx, by` por segmento) y lotes por categoría para la trayectoria.
+  void _ensureProjection(
     GcodeProgram program,
     ViewProjection projection,
+    int? executedLine,
   ) {
-    final Float32List? cached = _projected;
-    if (cached != null &&
-        identical(_projectedProgram, program) &&
-        _projectedScale == projection.scale &&
-        _projectedYaw == projection.yawDegrees &&
-        _projectedPitch == projection.pitchDegrees &&
-        _projectedCenterX == projection.center.x &&
-        _projectedCenterY == projection.center.y &&
-        _projectedCenterZ == projection.center.z) {
-      return cached;
+    final bool cached =
+        _projected != null &&
+        _batches != null &&
+        identical(_cachedProgram, program) &&
+        _cachedScale == projection.scale &&
+        _cachedYaw == projection.yawDegrees &&
+        _cachedPitch == projection.pitchDegrees &&
+        _cachedCenterX == projection.center.x &&
+        _cachedCenterY == projection.center.y &&
+        _cachedCenterZ == projection.center.z &&
+        _cachedExecutedLine == executedLine;
+    if (cached) {
+      return;
     }
+
     final List<MotionSegment> segments = program.segments;
     final Float32List points = Float32List(segments.length * 4);
+    final List<double> rapid = <double>[];
+    final List<double> cutting = <double>[];
+    final List<double> executed = <double>[];
+
     for (int i = 0; i < segments.length; i++) {
       final MotionSegment segment = segments[i];
       final Vector2 a = projection.project(segment.start);
@@ -225,39 +249,70 @@ class ViewerCanvasState extends ConsumerState<ViewerCanvas> {
       points[offset + 1] = a.y;
       points[offset + 2] = b.x;
       points[offset + 3] = b.y;
+
+      final bool done =
+          executedLine != null && program.lineIndexes[i] <= executedLine;
+      final List<double> target = done
+          ? executed
+          : (segment.rapid ? rapid : cutting);
+      target
+        ..add(a.x)
+        ..add(a.y)
+        ..add(b.x)
+        ..add(b.y);
     }
+
     _projected = points;
-    _projectedProgram = program;
-    _projectedScale = projection.scale;
-    _projectedYaw = projection.yawDegrees;
-    _projectedPitch = projection.pitchDegrees;
-    _projectedCenterX = projection.center.x;
-    _projectedCenterY = projection.center.y;
-    _projectedCenterZ = projection.center.z;
-    return points;
+    _batches = ProgramBatches(
+      rapid: Float32List.fromList(rapid),
+      cutting: Float32List.fromList(cutting),
+      executed: Float32List.fromList(executed),
+    );
+    _cachedProgram = program;
+    _cachedScale = projection.scale;
+    _cachedYaw = projection.yawDegrees;
+    _cachedPitch = projection.pitchDegrees;
+    _cachedCenterX = projection.center.x;
+    _cachedCenterY = projection.center.y;
+    _cachedCenterZ = projection.center.z;
+    _cachedExecutedLine = executedLine;
   }
 
+  /// Centro del encuadre: la **unión** de la trayectoria y el volumen de trabajo.
+  ///
+  /// Si solo se encuadrara el programa, la cama (dibujada en coordenadas
+  /// absolutas) aparecía lejos y parecía que la simulación flotaba en otro sitio.
+  /// Compartiendo encuadre, programa y cama están siempre en el mismo sistema de
+  /// referencia.
   Vector3 _center(GcodeProgram program) {
-    final Vector3? min = program.min;
-    final Vector3? max = program.max;
-    if (min == null || max == null) {
-      return Vector3.zero();
-    }
-    return (min + max) * 0.5;
+    final ({Vector3 min, Vector3 max}) frame = _frame(program);
+    return (frame.min + frame.max) * 0.5;
   }
 
   Vector3 _size(GcodeProgram program) {
-    final Vector3? min = program.min;
-    final Vector3? max = program.max;
-    if (min == null || max == null) {
-      return Vector3(100, 100, 10);
-    }
-    final Vector3 size = max - min;
+    final ({Vector3 min, Vector3 max}) frame = _frame(program);
+    final Vector3 size = frame.max - frame.min;
     return Vector3(
       math.max(size.x, 10),
       math.max(size.y, 10),
       math.max(size.z, 5),
     );
+  }
+
+  ({Vector3 min, Vector3 max}) _frame(GcodeProgram program) {
+    Vector3 min = program.min ?? Vector3.zero();
+    Vector3 max = program.max ?? Vector3.zero();
+    final List<double>? area = widget.workAreaMm;
+    if (area != null && area.length >= 2) {
+      final double volumeZ = area.length > 2 ? area[2] : 0;
+      min = Vector3(math.min(min.x, 0), math.min(min.y, 0), math.min(min.z, 0));
+      max = Vector3(
+        math.max(max.x, area[0]),
+        math.max(max.y, area[1]),
+        math.max(max.z, volumeZ),
+      );
+    }
+    return (min: min, max: max);
   }
 
   double _gridStep(Vector3 size) {

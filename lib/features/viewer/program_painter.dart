@@ -8,6 +8,30 @@ import '../../domain/entities/gcode_program.dart';
 import '../../domain/entities/motion_segment.dart';
 import 'view_projection.dart';
 
+/// Trayectoria ya proyectada y repartida en lotes de dibujo.
+///
+/// Se construye una vez por programa/vista (y por línea ejecutada) para que
+/// repintar sea solo enviar tres búferes: sin recorrer segmentos ni asignar
+/// listas en cada fotograma.
+class ProgramBatches {
+  const ProgramBatches({
+    required this.rapid,
+    required this.cutting,
+    required this.executed,
+  });
+
+  /// Pares de puntos (inicio, fin) en pantalla por cada rápido `G0`.
+  final Float32List rapid;
+
+  /// Pares de puntos de mecanizado (`G1` y arcos) pendientes de ejecutar.
+  final Float32List cutting;
+
+  /// Pares de puntos ya ejecutados por la máquina.
+  final Float32List executed;
+
+  bool get isEmpty => rapid.isEmpty && cutting.isEmpty && executed.isEmpty;
+}
+
 /// Dibuja la trayectoria en tres lotes (`drawRawPoints`).
 ///
 /// Un lote por categoría evita cambiar de `Paint` por segmento: rápido,
@@ -18,6 +42,7 @@ class ProgramPainter extends CustomPainter {
     required this.program,
     required this.projection,
     required this.colorScheme,
+    this.batches,
     this.headPosition,
     this.executedUpToLine,
     this.workAreaMm,
@@ -27,6 +52,12 @@ class ProgramPainter extends CustomPainter {
   final GcodeProgram program;
   final ViewProjection projection;
   final ColorScheme colorScheme;
+
+  /// Lotes precalculados (los aporta el lienzo desde su caché).
+  ///
+  /// Si llegan `null` se calculan al pintar: cómodo para pruebas y para usos
+  /// sueltos, pero el visor siempre los pasa cacheados.
+  final ProgramBatches? batches;
 
   /// Posición actual de la máquina (mm), si hay telemetría.
   final Vector3? headPosition;
@@ -63,10 +94,16 @@ class ProgramPainter extends CustomPainter {
       ..color = colorScheme.tertiary
       ..strokeWidth = 1.8;
 
-    final _Batches batches = _batches();
-    _drawBatch(canvas, rapidPaint, batches.rapid);
-    _drawBatch(canvas, cuttingPaint, batches.cutting);
-    _drawBatch(canvas, executedPaint, batches.executed);
+    final ProgramBatches resolved =
+        batches ??
+        buildBatches(
+          program: program,
+          projection: projection,
+          executedUpToLine: executedUpToLine,
+        );
+    _drawBatch(canvas, rapidPaint, resolved.rapid);
+    _drawBatch(canvas, cuttingPaint, resolved.cutting);
+    _drawBatch(canvas, executedPaint, resolved.executed);
 
     if (headPosition != null) {
       _drawHead(canvas, headPosition!);
@@ -74,18 +111,26 @@ class ProgramPainter extends CustomPainter {
     canvas.restore();
   }
 
-  _Batches _batches() {
+  /// Proyecta el programa en tres lotes (rápido, pendiente y ejecutado).
+  ///
+  /// Es O(n) sobre los segmentos: el lienzo lo cachea y solo lo repite cuando
+  /// cambia el programa, la vista o la línea ejecutada.
+  static ProgramBatches buildBatches({
+    required GcodeProgram program,
+    required ViewProjection projection,
+    int? executedUpToLine,
+  }) {
     final List<double> rapid = <double>[];
     final List<double> cutting = <double>[];
     final List<double> executed = <double>[];
-    final int? executedLine = executedUpToLine;
 
     for (int i = 0; i < program.segments.length; i++) {
       final MotionSegment segment = program.segments[i];
       final Vector2 a = projection.project(segment.start);
       final Vector2 b = projection.project(segment.end);
       final bool done =
-          executedLine != null && program.lineIndexes[i] <= executedLine;
+          executedUpToLine != null &&
+          program.lineIndexes[i] <= executedUpToLine;
       final List<double> target = done
           ? executed
           : (segment.rapid ? rapid : cutting);
@@ -95,14 +140,18 @@ class ProgramPainter extends CustomPainter {
         ..add(b.x)
         ..add(b.y);
     }
-    return _Batches(rapid: rapid, cutting: cutting, executed: executed);
+    return ProgramBatches(
+      rapid: Float32List.fromList(rapid),
+      cutting: Float32List.fromList(cutting),
+      executed: Float32List.fromList(executed),
+    );
   }
 
-  void _drawBatch(Canvas canvas, Paint paint, List<double> data) {
+  void _drawBatch(Canvas canvas, Paint paint, Float32List data) {
     if (data.isEmpty) {
       return;
     }
-    canvas.drawRawPoints(PointMode.lines, Float32List.fromList(data), paint);
+    canvas.drawRawPoints(PointMode.lines, data, paint);
   }
 
   void _drawVolume(Canvas canvas) {
@@ -188,6 +237,7 @@ class ProgramPainter extends CustomPainter {
   @override
   bool shouldRepaint(ProgramPainter oldDelegate) {
     return !identical(oldDelegate.program, program) ||
+        !identical(oldDelegate.batches, batches) ||
         oldDelegate.projection.center != projection.center ||
         oldDelegate.projection.scale != projection.scale ||
         oldDelegate.projection.yawDegrees != projection.yawDegrees ||
@@ -195,19 +245,7 @@ class ProgramPainter extends CustomPainter {
         oldDelegate.headPosition != headPosition ||
         oldDelegate.executedUpToLine != executedUpToLine ||
         oldDelegate.colorScheme != colorScheme ||
-        oldDelegate.workAreaMm != workAreaMm;
+        oldDelegate.workAreaMm != workAreaMm ||
+        oldDelegate.gridStepMm != gridStepMm;
   }
-}
-
-/// Búferes de puntos por lote (pares inicio/fin en `PointMode.lines`).
-class _Batches {
-  const _Batches({
-    required this.rapid,
-    required this.cutting,
-    required this.executed,
-  });
-
-  final List<double> rapid;
-  final List<double> cutting;
-  final List<double> executed;
 }
