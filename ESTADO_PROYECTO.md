@@ -952,6 +952,13 @@ enrutador antiguo falla (`Altura segura Z` no aparece) y con `IndexedStack` pasa
 `docs/prueba_banco.md`; el `State` de los módulos vive ahora toda la sesión (las
 páginas pesadas no se liberan al cambiar de pestaña).
 
+**Trazabilidad (commits de S-20):**
+
+| Hash | Commit |
+| :--- | :--- |
+| `3f0a66a` | `fix(ploter): eleva la punta a la altura segura y conserva el formulario al navegar` |
+| `b865b15` | `docs: bitacora de S-20 y checklist de banco del rotulador` |
+
 ---
 
 ## 5. Decisiones de arquitectura (ADR resumidas)
