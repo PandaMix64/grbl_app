@@ -1032,6 +1032,13 @@ saltada** · `flutter build windows --debug` → OK.
 del origen, la cama puede quedar fuera del encuadre. Valorar un «encuadrar
 programa + volumen» como botón aparte.
 
+**Trazabilidad (commits de S-22):**
+
+| Hash | Commit |
+| :--- | :--- |
+| `409243e` | `fix(visor): pinta la estela del simulador sobre la trayectoria y anade conmutadores de capa` |
+| `0e0772a` | `docs: bitacora de S-22 y checklist de capas del visor` |
+
 ---
 
 ## 5. Decisiones de arquitectura (ADR resumidas)
