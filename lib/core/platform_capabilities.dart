@@ -7,13 +7,19 @@ import 'dart:io';
 abstract final class PlatformCapabilities {
   /// `true` cuando la app puede enumerar y abrir puertos serie reales.
   ///
-  /// En Android el APK incluye `libserialport` (compilado con NDK) y la
-  /// enumeración devuelve rutas de `/dev/bus/usb/...`, pero abrir el
-  /// dispositivo exige que Android conceda el permiso USB a la app
-  /// (`UsbManager.requestPermission` y apertura desde el descriptor), un flujo
-  /// que el plugin publicado no implementa. Sin él, cualquier `open()` falla
-  /// con «permiso denegado». Por eso en Android la app se limita a preparar
-  /// trabajo (CAM, plóter y visor) y la conexión serie se bloquea con un aviso
-  /// en lugar de mostrar un error críptico.
-  static bool get serialSupported => !Platform.isAndroid;
+  /// - **Escritorio** (Windows/Linux/macOS): `libserialport` por FFI dentro del
+  ///   isolate worker; los chips USB-serie los expone el sistema como `COMx` o
+  ///   `/dev/ttyUSB*`.
+  /// - **Android**: se usa `usb_serial`, que pide permiso al `UsbManager`
+  ///   (`UsbManager.requestPermission`) y habla con el chip por *bulk
+  ///   transfers*. Requiere USB-OTG y que el móvil alimente al Arduino; el
+  ///   sistema muestra un diálogo de permiso la primera vez.
+  ///
+  /// `false` en plataformas sin host USB (iOS, web), donde la app se limita a
+  /// preparar trabajo (CAM, plóter y visor).
+  static bool get serialSupported =>
+      Platform.isAndroid ||
+      Platform.isWindows ||
+      Platform.isLinux ||
+      Platform.isMacOS;
 }

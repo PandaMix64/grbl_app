@@ -77,9 +77,10 @@ class _ConnectionBarState extends ConsumerState<ConnectionBar> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'En Android no hay conexión USB al GRBL: aquí puedes '
-                        'preparar y guardar trabajos (CAM, plóter y visor) y '
-                        'enviarlos desde la versión de escritorio.',
+                        'Esta plataforma no expone puertos USB serie: aquí '
+                        'puedes preparar y guardar trabajos (CAM, plóter y '
+                        'visor) y enviarlos desde Android o la versión de '
+                        'escritorio.',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.tertiary,
                         ),
@@ -160,9 +161,38 @@ class _ConnectionBarState extends ConsumerState<ConnectionBar> {
     );
   }
 
+  /// Descripción del puerto elegido, si el sistema la proporciona.
+  String? _selectedPortDescription(ConnectionUiState state) {
+    final String? selected = state.selectedPort;
+    if (selected == null) {
+      return null;
+    }
+    for (final SerialPortInfo port in state.ports) {
+      if (port.name == selected) {
+        return port.description;
+      }
+    }
+    return null;
+  }
+
   List<Widget> _details(ThemeData theme, ConnectionUiState state) {
     final List<Widget> widgets = <Widget>[];
     final GrblHandshake? handshake = state.handshake;
+
+    // En Android el nombre del puerto es una ruta (`/dev/bus/usb/001/002`); la
+    // descripción es lo que permite identificar la placa conectada.
+    final String? selectedDescription = _selectedPortDescription(state);
+    if (selectedDescription != null) {
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            'Puerto USB: $selectedDescription',
+            style: theme.textTheme.bodySmall,
+          ),
+        ),
+      );
+    }
 
     if (handshake != null) {
       final String info =

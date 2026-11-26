@@ -31,8 +31,8 @@ El detalle de tareas, decisiones (ADR), riesgos y bitácora de cada sesión vive
 ## Requisitos
 
 - Flutter 3.50.1 / Dart 3.14.0 o superior (`channel stable`).
-- Windows 10+, Linux o macOS con puerto USB; Android 8+ (sin conexión serie, ver
-  [Empaquetado](#empaquetado)).
+- Windows 10+, Linux o macOS con puerto USB; Android 8+ con USB-OTG (la serie
+  usa el permiso USB del sistema, ver [Empaquetado](#empaquetado)).
 - Controlador GRBL v1.1h a 115200 baudios, 8-N-1.
 
 ## Dependencias principales
@@ -42,7 +42,8 @@ El detalle de tareas, decisiones (ADR), riesgos y bitácora de cada sesión vive
 | `flutter_riverpod` | ^3.5.0 | Estado e inyección de dependencias (ADR-001) |
 | `material_ui` | ^1.11.1 | Widgets Material 3 (reemplaza `package:flutter/material.dart`, deprecado) |
 | `drift` / `drift_flutter` | ^2.35.4 / ^0.3.1 | Persistencia SQLite multiplataforma |
-| `flutter_libserialport` | ^0.6.0 | Acceso serial nativo (FFI); parche local para Gradle 9 (ADR-046) |
+| `flutter_libserialport` | ^0.6.0 | Acceso serial nativo (FFI) en escritorio; parche local para Gradle 9 (ADR-046) |
+| `usb_serial` | ^0.6.0 | Serie por USB-OTG en Android (permiso `UsbManager` + *bulk transfers*, ADR-048) |
 | `vector_math` | ^2.4.4 | Geometría 3D del visor (`vector_math_64`) |
 | `image` / `file_selector` | ^4.13.1 / ^1.1.0 | Entrada del motor CAM |
 | `custom_lint` / `riverpod_lint` | — | *(pendiente de decidir)* |
@@ -227,9 +228,11 @@ El APK de Android incluye `libsqlite3.so` y `libserialport.so` por ABI y la
 etiqueta visible es **GRBL CNC**. Mientras no exista `android/key.properties` se
 firma con la clave de depuración.
 
-**En Android no hay conexión serie** (ADR-047): el plugin no gestiona el permiso
-USB del `UsbManager`, así que la app bloquea «Conectar» con un aviso y se limita
-a preparar trabajo (CAM, plóter, visor) que luego se envía desde el escritorio.
+**En Android la serie va por USB-OTG** (ADR-048): al pulsar «Conectar» el sistema
+pide permiso para el dispositivo y la app habla con el chip por *bulk transfers*
+(CDC-ACM, CH340, CP210x, FTDI, PL2303). Necesita un adaptador OTG que alimente la
+placa; si el móvil no entrega corriente, usa un *hub* con alimentación. La misma
+app sirve para preparar el trabajo (CAM, plóter, visor) sin máquina conectada.
 
 La única dependencia `vendorizada` es `flutter_libserialport`
 (`third_party/flutter_libserialport`, ver ADR-046): su build de Android no

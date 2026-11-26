@@ -124,11 +124,11 @@ class ConnectionController extends Notifier<ConnectionUiState> {
   void selectBaudRate(int baudRate) =>
       state = state.copyWith(baudRate: baudRate);
 
-  /// Mensaje único para destinos sin puerto serie (Android).
+  /// Mensaje único para destinos sin host USB (iOS, web).
   static const String serialUnsupportedMessage =
-      'La conexión por USB no está disponible en Android: prepara el trabajo '
-      'aquí (CAM, plóter, visor) y conéctate a la máquina desde la versión de '
-      'escritorio.';
+      'Esta plataforma no expone puertos USB serie: prepara el trabajo aquí '
+      '(CAM, plóter, visor) y conéctate a la máquina desde Android o la versión '
+      'de escritorio.';
 
   /// Enumeración de puertos (FFI dentro del worker).
   Future<void> refreshPorts() async {

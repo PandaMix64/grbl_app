@@ -35,7 +35,7 @@
 | **Fase 2: Calibración** | Jogging, pasos/mm, parámetros `$`, perfiles y *backlash* | ✅ **Cerrada** | Jogging, parámetros, pasos/mm, perfiles, holgura, homing y origen |
 | **Fase 3: Visor 3D** | Renderizado, interpretación de G-code, pausa/detención y reanudación segura | ✅ **Cerrada** | Visor, ejecución con progreso real, pausa persistente, `interrupted` y reanudación verificada (S-08–S-11) |
 | **Fase 4: Generador CAM** | Imagen → G-code (vectorización, dithering, relieve 2.5D) | ✅ Cerrada (grabado, contornos con pestañas y relieve) | Modo láser requiere `$32` (P1-1) |
-| **Fase 5: Optimización y Empaquetado** | Rendimiento, atajos, builds Windows/Linux/macOS/Android | 🟡 En curso | APK de Android y release de Windows listos (S-18); faltan isolate (R-17), atajos, Linux/macOS, CHANGELOG y licencia |
+| **Fase 5: Optimización y Empaquetado** | Rendimiento, atajos, builds Windows/Linux/macOS/Android | 🟡 En curso | APK de Android (con serie USB-OTG desde S-19) y release de Windows listos; faltan isolate (R-17), atajos, Linux/macOS, CHANGELOG y licencia |
 
 Leyenda: 🟡 en curso · ✅ cerrada · ⬜ pendiente · 🔴 bloqueada
 
@@ -859,6 +859,60 @@ Recuperación de la sesión: `git log --oneline --grep="S-18"`.
 
 ---
 
+### S-19 — 2026-11-25 · Serie por USB-OTG en Android
+
+**Alcance:** conectar el GRBL desde el APK sin tocar dominio, servicio ni worker:
+un transporte nuevo detrás de `SerialPortRepository`, la fachada que ya existía
+para esto.
+
+**Entregado**
+
+| # | Cambio | Archivo(s) | Estado |
+| :--- | :--- | :--- | :--- |
+| 1 | `AndroidUsbSerialRepository`: permiso `UsbManager`, 8-N-1, DTR/RTS, cola de escrituras ordenada y aviso de desconexión | `lib/data/serial/android_usb_serial_repository.dart` | ✅ |
+| 2 | `SerialLineBuffer` compartido por los dos transportes | `lib/data/serial/serial_line_buffer.dart`, `lib_serial_port_repository.dart` | ✅ |
+| 3 | Android: servicio en proceso (el `MethodChannel` no existe en un isolate de fondo); escritorio: worker FFI en isolate | `lib/app/providers.dart` | ✅ |
+| 4 | `serialSupported` incluye Android; el aviso queda solo para iOS/web | `lib/core/platform_capabilities.dart`, `connection_controller.dart`, `connection_bar.dart` | ✅ |
+| 5 | Descripción del dispositivo bajo el selector (producto, fabricante, `VID:PID`) | `connection_bar.dart` | ✅ |
+| 6 | Dependencia `usb_serial 0.6.0` (drivers vendorizados, sin JitPack) | `pubspec.yaml`, `pubspec.lock` | ✅ |
+| 7 | Guía de empaquetado y README actualizados | `docs/empaquetado.md`, `README.md` | ✅ |
+| 8 | 6 pruebas nuevas: ensamblado de líneas y contrato del canal Android (lista, dispositivo ausente, permiso denegado) | `test/serial/` | ✅ |
+
+**Verificaciones ejecutadas:** `dart format --set-exit-if-changed .` → 0 cambios ·
+`flutter analyze` → *No issues found* · `flutter test` → **257 en verde, 1
+saltada** · `flutter build apk --debug` → OK · `flutter build apk --release
+--split-per-abi` → OK (19,3 / 21,0 / 22,4 MB, sin cambios de tamaño) ·
+`flutter build windows --debug` → OK. Los únicos avisos son las deprecaciones de
+`UsbRequest` en los drivers Java vendorizados. La prueba con placa real queda
+pendiente.
+
+**Decisiones de diseño**
+
+- Se **reutiliza la fachada** `SerialPortRepository`: dominio, `GrblSerialService`,
+  worker, controladores y UI no cambian.
+- Android usa `usb_serial` y no `libserialport` porque el chip USB no aparece como
+  `tty` y hace falta el permiso del `UsbManager`; el plugin trae los drivers de
+  `usb-serial-for-android` empaquetados y no exige JitPack.
+- En Android el worker corre en el **isolate principal**: el `MethodChannel` no
+  funciona en un isolate de fondo y las operaciones del plugin ya son asíncronas
+  (no hay lecturas FFI bloqueantes que justifiquen el isolate).
+- Las escrituras se **encadenan** en Dart para conservar el orden (`writeLine` es
+  síncrono para el servicio) y respetar el *character counting* de GRBL.
+- Los errores del plugin se traducen a mensajes accionables (permiso denegado,
+  dispositivo ausente, no es un adaptador serie).
+
+**Decisiones tomadas:** ADR-048 (sustituye ADR-047).
+
+**Abierto al cierre:** probar con placa real (OTG, corriente, primer permiso y
+desconexión); el timeout de 30 s del cliente puede saltar si el diálogo de permiso
+queda abierto mucho tiempo (basta reintentar); el APK sigue empaquetando
+`libserialport.so` sin usarlo; `usb_serial` busca mantenedor (R-22).
+
+**Trazabilidad (commits de S-19):** pendiente de commit —
+`feat(conexion): habilita la serie por USB-OTG en Android [S-19]`.
+
+---
+
 ## 5. Decisiones de arquitectura (ADR resumidas)
 
 | ID | Decisión | Motivo | Consecuencia |
@@ -909,7 +963,8 @@ Recuperación de la sesión: `git log --oneline --grep="S-18"`.
 | ADR-044 | Plóter con rotulador configurable (`M3 S…`/`M5` o `G1 Z…`/`G0 Z…`) y dos modos de dibujo | No todos los plóters usan servo ni todos los trabajos son line-art | Vectorial con orden por proximidad y bordado raster con ángulo/puntadas |
 | ADR-045 | Suavizado por promedio de vecinos con conservación de esquinas, antes de simplificar | Las diagonales salían como escalera de píxeles con decenas de micro-movimientos | `smoothMm` (0 = sin suavizar); esquinas con desviación > 1,5 × ventana se mantienen |
 | ADR-046 | Vendorizar `flutter_libserialport` (0.6.0) con un `android/build.gradle.kts` propio | Flutter 3.50 exige Gradle 9.5/AGP 9.3.1 y el build publicado usa `jcenter()` + AGP 8.7, que Gradle 9 ya no evalúa | Solo cambia el build de Android; el código Dart y las compilaciones CMake de escritorio son los publicados. Revisar al actualizar el plugin |
-| ADR-047 | En Android la conexión serie se declara no soportada y se bloquea con aviso | Abrir el USB exige permiso del `UsbManager` y apertura por descriptor, flujo que el plugin no implementa; el error nativo no es accionable | `PlatformCapabilities.serialSupported` + `serialSupportProvider`; el APK se limita a CAM, plóter y visor |
+| ADR-047 | En Android la conexión serie se declara no soportada y se bloquea con aviso | Abrir el USB exige permiso del `UsbManager` y apertura por descriptor, flujo que el plugin no implementa; el error nativo no es accionable | Sustituida por ADR-048 en S-19: la fachada `SerialPortRepository` permitió añadir el transporte sin tocar el resto |
+| ADR-048 | En Android la serie va por `usb_serial` (drivers de `usb-serial-for-android` vendorizados) y el worker corre en el isolate principal | Los chips USB no aparecen como `tty`; hace falta `UsbManager.requestPermission` y *bulk transfers*. Un `MethodChannel` no funciona en un isolate de fondo y el plugin ya es asíncrono, así que el isolate FFI no aporta | `AndroidUsbSerialRepository` detrás de `SerialPortRepository`; escritorio sigue con `libserialport` en isolate. Si el plugin deja de mantenerse, solo se cambia esa clase |
 
 ---
 
@@ -929,7 +984,7 @@ Recuperación de la sesión: `git log --oneline --grep="S-18"`.
 | ID | Riesgo | Impacto | Mitigación | Estado |
 | :--- | :--- | :--- | :--- | :--- |
 | R-01 | Pausa (`!`) con herramienta activa | Incendio / lesión | Secuencia `!` → `0x9E`, implementada en `SafetyController` (P0-1) | 🔴 Abierto |
-| R-02 | `flutter_libserialport` sin mantenimiento (0.6.0, >1 año) | Bloqueo de plataforma | Fachada propia + segunda implementación sobre `libserialport`. En S-18 se vendoriza para Gradle 9 (ADR-046) y en Android la serie se declara no soportada (ADR-047) | 🟡 Mitigado en diseño |
+| R-02 | `flutter_libserialport` sin mantenimiento (0.6.0, >1 año) | Bloqueo de plataforma | Fachada propia + segunda implementación sobre `libserialport`. En S-18 se vendoriza para Gradle 9 (ADR-046); desde S-19 solo se usa en escritorio (en Android manda `usb_serial`, ADR-048) | 🟡 Mitigado en diseño |
 | R-03 | SDK Flutter desactualizado | Dependencias antiguas o incompatibles | Resuelto en S-02: Flutter 3.50.1 / Dart 3.14.0 | ✅ Cerrado |
 | R-04 | Sin emulador GRBL no se puede probar streaming ni alarmas | Errores detectados sólo en hardware | Puerto falso + emulador antes de la Fase 2 | 🟡 Mitigado en diseño |
 | R-05 | Renderizado lento con G-code extenso | UI inutilizable en trabajos reales | Batching con `drawRawPoints` + criterio de 60 fps con 200 k segmentos | 🟡 Mitigado en diseño |
@@ -949,6 +1004,7 @@ Recuperación de la sesión: `git log --oneline --grep="S-18"`.
 | R-19 | Si se pierde el USB durante la ejecución, el estado de ejecución no se limpia solo | UI mostrando «Ejecutando» con la máquina desconectada | Cerrado en S-11: al desconectar se cancela la ejecución, el proyecto pasa a `interrupted` y se conserva el punto de reanudación | ✅ Cerrado |
 | R-20 | La consola evita las salvaguardas de la UI (solo restrictiva fuera de `Idle`) | Un comando manual puede mover la máquina sin comprobaciones | Se aceptan `$` siempre y el resto solo en `Idle`; documentado como vía avanzada | 🟡 Vigilado |
 | R-21 | `$X` sale de la alarma sin corregir la causa | Repetir el choque contra el tope o la pieza | Confirmación explícita con el aviso; el homing sigue siendo obligatorio antes de trabajar | 🟡 Vigilado |
+| R-22 | `usb_serial` busca mantenedor (el propio paquete lo anuncia) y sus drivers Java están vendorizados | Sin actualizaciones de seguridad/compatibilidad con Android nuevo | El transporte está aislado en `AndroidUsbSerialRepository`; si deja de funcionar se sustituye por un `MethodChannel` propio con los mismos drivers sin tocar el resto | 🟡 Vigilado |
 
 ---
 
@@ -957,7 +1013,9 @@ Recuperación de la sesión: `git log --oneline --grep="S-18"`.
 1. **Completar la verificación en banco**: 5.6 (reanudar sin repetir tramo), 5.7 (detener), §6 (divergencia de reanudación), reinicio del trabajo guardado (§11), CAM (§12) y robustez §7–§9.
 2. **Fase 5 — Optimización y empaquetado** (el APK y el release de Windows ya salen, S-18): parseo de G-code en isolate (R-17), atajos de escritorio, builds Linux/macOS, icono propio y `CHANGELOG.md` + licencia + `NOTICE` con la atribución GPLv3 de GRBL.
 3. Push al remoto para ejecutar el CI (R-08): el job de Android necesita `platforms;android-36` y el NDK, y el wrapper de Gradle ya está versionado.
-4. Instalar el APK en un móvil real (activando «Instalar por USB» en HyperOS) y comprobar arranque, SQLite y generación de CAM.
+4. Probar el APK en un móvil real con adaptador OTG y la placa GRBL (activando
+   «Instalar por USB» en HyperOS): permiso USB, handshake, telemetría, jog y
+   desconexión durante la ejecución.
 
 
 

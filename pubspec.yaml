@@ -40,6 +40,10 @@ dependencies:
   drift_flutter: ^0.3.1
   vector_math: ^2.4.4
   flutter_libserialport: ^0.6.0
+  # Serie por USB-OTG en Android: pide permiso al `UsbManager` y habla con el
+  # chip (CDC-ACM, CH340, CP210x, FTDI, PL2303) por *bulk transfers*. En
+  # escritorio se sigue usando `flutter_libserialport` (FFI).
+  usb_serial: ^0.6.0
   image: ^4.13.1
   file_selector: ^1.1.0
   material_ui: ^1.11.1

@@ -6,6 +6,7 @@ import 'package:libserialport/libserialport.dart';
 
 import '../../core/grbl/grbl_constants.dart';
 import '../../domain/repositories/serial_port_repository.dart';
+import 'serial_line_buffer.dart';
 
 /// Implementación real de [SerialPortRepository] sobre `libserialport` (FFI).
 ///
@@ -18,7 +19,7 @@ import '../../domain/repositories/serial_port_repository.dart';
 /// (`115200 baudios, 8-N-1`), y terminadores `\r` en las líneas.
 class LibSerialPortRepository implements SerialPortRepository {
   final StreamController<String> _lines = StreamController<String>.broadcast();
-  final StringBuffer _incoming = StringBuffer();
+  final SerialLineBuffer _incoming = SerialLineBuffer();
 
   SerialPort? _port;
   SerialPortReader? _reader;
@@ -186,22 +187,10 @@ class LibSerialPortRepository implements SerialPortRepository {
     if (_lines.isClosed) {
       return;
     }
-    _incoming.write(utf8.decode(chunk, allowMalformed: true));
-    String text = _incoming.toString();
-    int newline = text.indexOf('\n');
-    while (newline >= 0) {
-      String line = text.substring(0, newline);
-      text = text.substring(newline + 1);
-      if (line.endsWith('\r')) {
-        line = line.substring(0, line.length - 1);
-      }
-      if (line.isNotEmpty) {
-        _lines.add(line);
-      }
-      newline = text.indexOf('\n');
+    for (final String line in _incoming.add(
+      utf8.decode(chunk, allowMalformed: true),
+    )) {
+      _lines.add(line);
     }
-    _incoming
-      ..clear()
-      ..write(text);
   }
 }

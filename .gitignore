@@ -51,6 +51,7 @@ coverage/
 devtools_options.yaml
 # CMake/Gradle generados al compilar plugins vendorizados (S-18)
 **/.cxx/
+**/android/.gradle/
 # Firma de Android: nunca versionar credenciales ni keystores
 android/key.properties
 *.jks

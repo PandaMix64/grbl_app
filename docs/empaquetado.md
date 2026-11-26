@@ -91,15 +91,27 @@ Instalar por USB* y acepta el aviso que aparece en pantalla.
 | CAM láser, contornos, relieve, plóter | ✅ Compila y genera G-code en el isolate |
 | Visor 3D, previsualizaciones, proyecto guardado | ✅ |
 | Calibración y consola | ✅ (sin máquina conectada no envían nada) |
-| **Conexión serie al GRBL** | ❌ Bloqueada con aviso (ADR-047) |
+| **Conexión serie al GRBL** | ✅ Por USB-OTG, con permiso del `UsbManager` (ADR-048) |
 
-El motivo es que `libserialport` en Android enumera `/dev/bus/usb/...`, pero
-abrir el dispositivo requiere que la app pida permiso al `UsbManager` y reciba
-el descriptor; el plugin publicado no implementa ese flujo y `open()` falla con
-«permiso denegado». La app lo detecta (`PlatformCapabilities.serialSupported`),
-deshabilita «Conectar» y explica que el trabajo se prepara aquí y se envía
-desde el escritorio. Habilitarlo es trabajo futuro: petición de permiso en
-Kotlin + apertura por `fd` (ver R-02).
+La serie en Android no usa `libserialport` (los chips USB no aparecen como
+`/dev/tty*`), sino el plugin `usb_serial`, que:
+
+- enumera los dispositivos del host USB y lanza el diálogo de permiso del sistema
+  al crear el puerto;
+- habla con el chip por *bulk transfers* con los drivers de
+  `usb-serial-for-android` (CDC-ACM, CH340/CH341, CP210x, FTDI, PL2303);
+- configura 8-N-1 sin control de flujo y aplica DTR/RTS (el reset del Arduino
+  imprime el banner de GRBL).
+
+Requisitos en el móvil: USB-OTG y corriente suficiente para la placa. Si el móvil
+no la entrega, usa un *hub* alimentado. La primera vez hay que aceptar «Permitir
+acceso a…»; marcando «Usar siempre para este dispositivo» no vuelve a preguntar.
+
+El selector de puertos muestra la ruta USB y, debajo, la descripción del
+dispositivo (producto, fabricante y `VID:PID`): es lo que permite distinguir la
+placa cuando hay más de un periférico conectado. La conexión corre en el isolate
+principal (el `MethodChannel` del plugin no funciona en un isolate de fondo); las
+lecturas son asíncronas y no bloquean la UI.
 
 ### 1.6 Parche local de `flutter_libserialport`
 
@@ -115,6 +127,11 @@ Gradle 9, que Flutter 3.50 impone. Por eso el paquete está vendorizado en
 - El manifiesto del módulo pierde el atributo `package=` (prohibido desde AGP 8).
 - El código Dart, el Kotlin del plugin y todas las compilaciones nativas de
   escritorio son idénticos a los publicados.
+
+Desde ADR-048 la app ya no usa este plugin en Android (allí manda `usb_serial`),
+pero el override sigue siendo necesario para Windows/Linux/macOS. El APK todavía
+empaqueta `libserialport.so`; se puede excluir más adelante para recortar tamaño
+si se separa la dependencia por plataforma.
 
 Al actualizar el plugin hay que comprobar si la versión nueva ya trae un build
 compatible; si es así, basta con borrar el override y el directorio.
@@ -143,5 +160,7 @@ aapt2 dump badging build\app\outputs\flutter-apk\app-arm64-v8a-release.apk
 ```
 
 Comprobaciones manuales mínimas en el móvil: arranque, abrir un proyecto
-guardado (SQLite), cargar una imagen y generar un grabado, y que «Conectar»
-aparezca deshabilitado con el aviso de Android.
+guardado (SQLite), cargar una imagen y generar un grabado, y con la placa
+enchufada por OTG pulsar «Conectar»: debe aparecer el diálogo de permiso USB,
+el handshake (versión, búfer y parámetros) y la telemetría de posición. Al
+desenchufar, la app debe avisar que el dispositivo se desconectó.

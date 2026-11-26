@@ -161,7 +161,7 @@ void main() {
     await settle(tester);
 
     expect(
-      find.textContaining('En Android no hay conexión USB al GRBL'),
+      find.textContaining('aquí puedes preparar y guardar trabajos'),
       findsOneWidget,
     );
     expect(find.text('Sin puertos'), findsOneWidget);

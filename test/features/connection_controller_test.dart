@@ -50,7 +50,8 @@ void main() {
     expect(state().isBusy, isFalse);
   });
 
-  test('sin soporte serie (Android) no enumera ni abre el puerto', () async {
+  test('sin soporte serie (plataforma sin host USB) no enumera ni abre '
+      'el puerto', () async {
     final ProviderContainer android = ProviderContainer(
       overrides: [
         databaseProvider.overrideWithValue(database),
