@@ -961,6 +961,36 @@ páginas pesadas no se liberan al cambiar de pestaña).
 
 ---
 
+### S-21 — 2026-11-25 · Simulador de reproducción en el visor
+
+**Alcance:** revisar la secuencia completa de un programa **antes** de ejecutarlo,
+con reproducción, línea de tiempo y velocidad, sin tocar la máquina.
+
+**Entregado**
+
+| # | Cambio | Archivo(s) | Estado |
+| :--- | :--- | :--- | :--- |
+| 1 | `SimulationTimeline`: reparto del tiempo por `longitud / avance` (los `G0` a un rápido supuesto), búsqueda binaria del bloque y cursor interpolado | `lib/domain/services/simulation_timeline.dart` | ✅ |
+| 2 | `SimulationController`: reproducir, pausar, saltar a bloque, retroceder, línea de tiempo y velocidad (0,25×–8×); se reinicia al cargar otro programa y conserva la velocidad | `lib/features/viewer/simulation_controller.dart` | ✅ |
+| 3 | Barra slim ⏮️ ⏯️ ⏭️ + slider arrastrable + velocidad + tiempo/línea, superpuesta **abajo** del lienzo, con ticker propio y paso máximo de 250 ms por fotograma | `lib/features/viewer/widgets/simulation_bar.dart`, `viewer_page.dart` | ✅ |
+| 4 | Estela del simulador en **capa de pintura aparte** (`RepaintBoundary` + `CustomPaint`), con el búfer proyectado cacheado: el prefijo reproducido se dibuja con una vista `Float32List`, así el repintado es O(1) | `lib/features/viewer/simulation_painter.dart`, `widgets/viewer_canvas.dart` | ✅ |
+| 5 | El lienzo pasa a `ConsumerStatefulWidget`: solo él se reconstruye por fotograma; la ruta completa no se recalcula | `widgets/viewer_canvas.dart` | ✅ |
+| 6 | Módulos ocultos con `TickerMode(false)`: el simulador no avanza al cambiar de pestaña | `lib/app/home_shell.dart` | ✅ |
+| 7 | Con un trabajo real activo el simulador se pausa y sus controles quedan deshabilitados | `widgets/simulation_bar.dart` | ✅ |
+| 8 | 16 pruebas nuevas: reparto de tiempo y cursor, control de reproducción completo y barra (juego, pausa, bloques, velocidad, móvil sin desbordar) | `test/domain/simulation_timeline_test.dart`, `test/features/simulation_controller_test.dart`, `test/features/simulation_bar_test.dart` | ✅ |
+
+**Verificaciones ejecutadas:** `dart format --set-exit-if-changed .` → 0 cambios ·
+`flutter analyze` → *No issues found* · `flutter test` → **276 en verde, 1
+saltada** · `flutter build windows --debug` → OK.
+
+**Decisiones tomadas:** ADR-051, ADR-052.
+
+**Abierto al cierre:** el rápido de los `G0` se supone 5000 mm/min (en GRBL depende
+de `$110`–`$112`), así que los tiempos de los desplazamientos en vacío son
+aproximados; si molestan, se pueden tomar de la EEPROM del perfil conectado.
+
+---
+
 ## 5. Decisiones de arquitectura (ADR resumidas)
 
 | ID | Decisión | Motivo | Consecuencia |
@@ -1015,6 +1045,8 @@ páginas pesadas no se liberan al cambiar de pestaña).
 | ADR-048 | En Android la serie va por `usb_serial` (drivers de `usb-serial-for-android` vendorizados) y el worker corre en el isolate principal | Los chips USB no aparecen como `tty`; hace falta `UsbManager.requestPermission` y *bulk transfers*. Un `MethodChannel` no funciona en un isolate de fondo y el plugin ya es asíncrono, así que el isolate FFI no aporta | `AndroidUsbSerialRepository` detrás de `SerialPortRepository`; escritorio sigue con `libserialport` en isolate. Si el plugin deja de mantenerse, solo se cambia esa clase |
 | ADR-049 | Los módulos de navegación se montan una vez y se **conservan** (`IndexedStack` perezoso) en lugar de recrearse | Devolver un widget nuevo por pestaña destruía el `State` de la página: los formularios de CAM y trazado volvían a los valores por defecto sin avisar —el plóter pasaba de «Eje Z» a «Husillo» y el G-code salía sin `G0 Z`, con la punta arrastrando— | Cada módulo se monta al visitarse y permanece en memoria hasta cerrar la app; no hay forma de reiniciar un formulario salvo recargar |
 | ADR-050 | El retroceso del rotulador por Z usa la **altura segura del perfil** y avisa si el operario la baja | 2 mm fijos no garantizan que la punta libre el papel, y «altura segura» ya es un dato del perfil que usan las secuencias de reanudación | `G0 Z<safeZ>` antes de cada viaje en XY; aviso no bloqueante al generar; la bajada `G1 Z…` lleva el avance de dibujo |
+| ADR-051 | El simulador del visor tiene **reloj propio derivado de los avances** del G-code, no de la telemetría | Revisar un programa requiere poder pausar, retroceder y acelerar; la máquina solo informa de su estado real y no permite ver el futuro | `SimulationTimeline` (dominio puro, testeable) + `SimulationController`; los `G0` usan un rápido supuesto (5000 mm/min) porque no llevan `F` |
+| ADR-052 | La estela del simulador se pinta en **capa aparte** y como prefijo del búfer proyectado | Repintar la trayectoria completa a 60 fps recorrería cientos de miles de segmentos por fotograma | `SimulationPainter` con `Float32List.view` sobre el prefijo (O(1)), caché del búfer por programa+proyección y `RepaintBoundary` para no repintar la ruta |
 
 ---
 

@@ -76,6 +76,10 @@ G1 Z0
 | Paso | Acción | Esperado |
 | :--- | :--- | :--- |
 | 5.1 | Cargar el archivo en el visor | Trayectoria dibujada, sin avisos inesperados |
+| 5.1b | **Simulador** (barra inferior): «Reproducir» | El cabezal simulado recorre el programa, deja estela y el tiempo avanza; la máquina no se mueve |
+| 5.1c | Arrastrar la línea de tiempo a la mitad | Cabezal y estela saltan a ese punto; al soltar sigue desde ahí |
+| 5.1d | «Bloque siguiente» / «Bloque anterior» sin reproducir | Avanza/retrocede exactamente un bloque del G-code |
+| 5.1e | Cambiar la velocidad a 4× y reproducir | El reloj avanza cuatro veces más rápido; el tiempo mostrado sigue siendo el del programa |
 | 5.2 | «Ejecutar» con el perfil de holgura ≠ 0 | Diálogo de confirmación; mensaje con «N compensaciones» |
 | 5.3 | Observar el progreso | La línea avanza con el movimiento real; la parte ejecutada cambia de color |
 | 5.4 | «Pausa» a mitad | `Hold`, herramienta apagada, «Progreso guardado en la línea N» |
