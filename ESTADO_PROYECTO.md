@@ -989,6 +989,13 @@ saltada** · `flutter build windows --debug` → OK.
 de `$110`–`$112`), así que los tiempos de los desplazamientos en vacío son
 aproximados; si molestan, se pueden tomar de la EEPROM del perfil conectado.
 
+**Trazabilidad (commits de S-21):**
+
+| Hash | Commit |
+| :--- | :--- |
+| `7ba8d84` | `feat(visor): simulador de reproduccion con linea de tiempo y velocidad` |
+| `9042485` | `docs: bitacora de S-21 y checklist del simulador` |
+
 ---
 
 ## 5. Decisiones de arquitectura (ADR resumidas)
