@@ -70,7 +70,13 @@ class PlotSettings {
   final int penDownS;
 
   /// Alturas de Z cuando [pen] es [PenControl.zAxis].
+  ///
+  /// [zUpMm] es la **altura segura de viaje**: la punta debe quedar libre del
+  /// papel mientras el cabezal se desplaza en XY. Si el perfil declara una
+  /// altura segura mayor, el controlador avisa.
   final double zUpMm;
+
+  /// Z a la que la punta toca el papel.
   final double zDownMm;
 
   final double drawFeedMmMin;
@@ -316,6 +322,10 @@ class PlotGenerator {
   }
 
   /// G-code del trazado con ciclos bajar/dibujar/subir.
+  ///
+  /// Invariante: **ningún desplazamiento en XY con la punta apoyada**. Cada
+  /// trayecto se abre con `G0 Z<zUp>` (altura segura de viaje) y el `G0 X… Y…`
+  /// va siempre después de ese retroceso; el trayecto termina subiendo otra vez.
   String _emit({
     required List<List<Vector2>> paths,
     required PlotSettings settings,
@@ -347,8 +357,10 @@ class PlotGenerator {
       _penUp(out, settings);
     }
 
+    if (settings.pen == PenControl.spindle) {
+      out.writeln('M5');
+    }
     out
-      ..writeln('M5')
       ..writeln('G0 X${_mm(settings.originXmm)} Y${_mm(settings.originYmm)}')
       ..writeln('; fin del trazado');
     return out.toString();
@@ -364,7 +376,11 @@ class PlotGenerator {
     if (settings.pen == PenControl.spindle) {
       out.writeln('M3 S${settings.penDownS}');
     } else {
-      out.writeln('G1 Z${_mm(settings.zDownMm)}');
+      // `F` explícito: sin él la bajada heredaría el avance del viaje (`G0`),
+      // que en un plóter es demasiado rápido para apoyar la punta sin golpear.
+      out.writeln(
+        'G1 Z${_mm(settings.zDownMm)} F${_mm(settings.drawFeedMmMin)}',
+      );
     }
   }
 

@@ -107,7 +107,8 @@ class PlotController extends Notifier<PlotUiState> {
         message:
             'Trazado generado: ${result.paths} trayectos, '
             '${result.points} puntos, ${result.lineCount} líneas '
-            '(${result.mode.label}).',
+            '(${result.mode.label}).'
+            '${_penRetractWarning(settings, profile)}',
       );
     } on PlotException catch (error) {
       state = state.copyWith(isBusy: false, error: error.message);
@@ -117,6 +118,23 @@ class PlotController extends Notifier<PlotUiState> {
         error: 'No se pudo generar el trazado: $error',
       );
     }
+  }
+
+  /// Aviso cuando el retroceso del rotulador no alcanza la altura segura del
+  /// perfil: la punta arrastraría entre trayectos y el dibujo saldría unido.
+  static String _penRetractWarning(
+    PlotSettings settings,
+    MachineProfile profile,
+  ) {
+    if (settings.pen != PenControl.zAxis ||
+        profile.safeZmm <= 0 ||
+        settings.zUpMm >= profile.safeZmm) {
+      return '';
+    }
+    return ' Atención: la Z de viaje '
+        '(${settings.zUpMm.toStringAsFixed(2)} mm) queda por debajo de la '
+        'altura segura del perfil (${profile.safeZmm.toStringAsFixed(2)} mm): '
+        'la punta puede arrastrar entre trayectos.';
   }
 
   /// Carga el resultado en el visor para revisarlo y ejecutarlo desde allí.

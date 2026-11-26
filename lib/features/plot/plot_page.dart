@@ -37,6 +37,37 @@ class _PlotPageState extends ConsumerState<PlotPage> {
   bool _invert = false;
   bool _optimize = true;
 
+  /// `true` cuando el operario escribe en «Altura segura Z»: a partir de ahí la
+  /// app no vuelve a proponer la del perfil.
+  bool _safeZTouched = false;
+  bool _safeZApplied = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _applyProfileSafeZ(ref.read(activeProfileProvider).value);
+      }
+    });
+  }
+
+  /// Propone la altura segura del perfil como Z de viaje mientras el campo no
+  /// se haya tocado: es la altura que la app ya considera libre de choques.
+  void _applyProfileSafeZ(MachineProfile? profile) {
+    if (profile == null ||
+        _safeZTouched ||
+        _safeZApplied ||
+        profile.safeZmm <= 0) {
+      return;
+    }
+    _safeZApplied = true;
+    setState(() => _zUp.text = _formatMm(profile.safeZmm));
+  }
+
+  static String _formatMm(double value) =>
+      value.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
+
   @override
   void dispose() {
     _width.dispose();
@@ -115,6 +146,10 @@ class _PlotPageState extends ConsumerState<PlotPage> {
       _travelFeed.text = (profile.defaultFeedMmMin * 2.5)
           .clamp(100, 30000)
           .toStringAsFixed(0);
+      if (profile.safeZmm > 0) {
+        _safeZApplied = true;
+        _zUp.text = _formatMm(profile.safeZmm);
+      }
     });
   }
 
@@ -123,6 +158,13 @@ class _PlotPageState extends ConsumerState<PlotPage> {
     final PlotUiState state = ref.watch(plotControllerProvider);
     final MachineProfile? profile = ref.watch(activeProfileProvider).value;
     final ThemeData theme = Theme.of(context);
+    // El perfil llega de forma asíncrona: se recoge aquí la primera vez.
+    ref.listen<AsyncValue<MachineProfile?>>(activeProfileProvider, (
+      AsyncValue<MachineProfile?>? previous,
+      AsyncValue<MachineProfile?> next,
+    ) {
+      _applyProfileSafeZ(next.value);
+    });
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -263,10 +305,10 @@ class _PlotPageState extends ConsumerState<PlotPage> {
                 )
               else ...<Widget>[
                 _Field(
-                  label: 'Z de viaje',
+                  label: 'Altura segura Z',
                   controller: _zUp,
-                  width: 110,
-                  onChanged: () => setState(() {}),
+                  width: 130,
+                  onChanged: () => setState(() => _safeZTouched = true),
                 ),
                 _Field(
                   label: 'Z de dibujo',
@@ -332,6 +374,20 @@ class _PlotPageState extends ConsumerState<PlotPage> {
                 ),
               ],
             ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _pen == PenControl.spindle
+                ? 'Con «Husillo» la punta se controla con M3 S…/M5: el G-code no '
+                      'emite ningún movimiento de Z. Si tu plóter la eleva con '
+                      'el eje Z, elige «Eje Z».'
+                : 'Cada trayecto se abre con G0 Z… (altura segura) y la punta '
+                      'solo baja con G1 Z… mientras dibuja.',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: _pen == PenControl.spindle
+                  ? theme.colorScheme.tertiary
+                  : theme.colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 12),
           Text(

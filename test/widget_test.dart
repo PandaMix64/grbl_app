@@ -5,6 +5,8 @@ import 'package:grbl_app/app/app.dart';
 import 'package:grbl_app/app/providers.dart';
 import 'package:grbl_app/data/database/app_database.dart';
 import 'package:grbl_app/data/serial/grbl_worker_client.dart';
+import 'package:grbl_app/domain/entities/machine_profile.dart';
+import 'package:grbl_app/domain/services/plot_generator.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'helpers/fake_serial_port.dart';
@@ -143,6 +145,62 @@ void main() {
       ),
     );
     expect(runButton.onPressed, isNull);
+  });
+
+  testWidgets('los parámetros del plóter sobreviven al cambiar de pestaña', (
+    WidgetTester tester,
+  ) async {
+    await database.upsertProfile(
+      const MachineProfile(
+        id: 'plotter',
+        name: 'Plóter',
+        tool: ToolType.plotter,
+        travelXmm: 400,
+        travelYmm: 300,
+        travelZmm: 40,
+        safeZmm: 6,
+        defaultFeedMmMin: 1200,
+      ),
+    );
+    await tester.pumpWidget(buildApp());
+    await settle(tester);
+
+    await tester.tap(find.text('Trazado').first);
+    await settle(tester);
+
+    // Con husillo no hay altura segura que ajustar.
+    expect(find.text('Altura segura Z'), findsNothing);
+
+    await tester.ensureVisible(find.byType(DropdownButton<PenControl>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(DropdownButton<PenControl>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Eje Z').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Altura segura Z'), findsOneWidget);
+    // La altura segura del perfil se propone como Z de viaje.
+    expect(
+      tester
+          .widgetList<TextField>(find.byType(TextField))
+          .any((TextField field) => field.controller?.text == '6'),
+      isTrue,
+    );
+
+    // Visitar el visor y volver no debe reiniciar el formulario: si el
+    // rotulador se quedara en «Husillo», el G-code saldría sin `G0 Z`.
+    await tester.tap(find.text('Visor').first);
+    await settle(tester);
+    await tester.tap(find.text('Trazado').first);
+    await settle(tester);
+
+    expect(find.text('Altura segura Z'), findsOneWidget);
+    expect(
+      tester
+          .widgetList<TextField>(find.byType(TextField))
+          .any((TextField field) => field.controller?.text == '6'),
+      isTrue,
+    );
   });
 
   testWidgets('sin soporte serie avisa y bloquea la conexión', (

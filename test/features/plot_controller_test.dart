@@ -118,6 +118,42 @@ void main() {
     expect(state().error, contains('excede'));
   });
 
+  test(
+    'avisa si la Z de viaje no alcanza la altura segura del perfil',
+    () async {
+      await useProfile(plotter);
+      controller().loadImage(_squareImage(), 'dibujo.png');
+
+      await controller().generate(
+        const PlotSettings(
+          widthMm: 20,
+          pixelMm: 1,
+          simplifyMm: 0.3,
+          pen: PenControl.zAxis,
+          zUpMm: 2,
+          zDownMm: -0.3,
+        ),
+      );
+
+      expect(state().result, isNotNull);
+      expect(state().result!.gcode, contains('G0 Z2.000'));
+      expect(state().message, contains('altura segura del perfil'));
+
+      await controller().generate(
+        PlotSettings(
+          widthMm: 20,
+          pixelMm: 1,
+          simplifyMm: 0.3,
+          pen: PenControl.zAxis,
+          zUpMm: plotter.safeZmm,
+          zDownMm: -0.3,
+        ),
+      );
+
+      expect(state().message, isNot(contains('altura segura del perfil')));
+    },
+  );
+
   test('sin imagen avisa en lugar de generar', () async {
     await useProfile(plotter);
 

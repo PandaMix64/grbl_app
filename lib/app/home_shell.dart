@@ -23,6 +23,9 @@ class HomeShell extends StatefulWidget {
 class _HomeShellState extends State<HomeShell> {
   int _selectedIndex = 0;
 
+  /// Módulos ya visitados: se montan una sola vez y se conservan.
+  final Set<int> _visited = <int>{0};
+
   static const List<_Destination> _destinations = <_Destination>[
     _Destination(
       label: 'Inicio',
@@ -55,12 +58,44 @@ class _HomeShellState extends State<HomeShell> {
     if (index == _selectedIndex) {
       return;
     }
-    setState(() => _selectedIndex = index);
+    setState(() {
+      _selectedIndex = index;
+      _visited.add(index);
+    });
+  }
+
+  /// Módulos montados una sola vez y ocultos en lugar de destruidos.
+  ///
+  /// Con un `switch` que devolvía un widget nuevo, cambiar de pestaña destruía
+  /// el `State` de la página: los formularios (rotulador del plóter, modo del
+  /// CAM, umbral, avances...) volvían a los valores por defecto justo después
+  /// de revisar el trabajo en el visor, y el siguiente G-code se generaba con
+  /// otra configuración —el plóter, por ejemplo, pasaba de «Eje Z» a «Husillo»
+  /// y dejaba de elevar la punta—.
+  Widget _modules() {
+    return IndexedStack(
+      index: _selectedIndex,
+      sizing: StackFit.expand,
+      children: <Widget>[
+        for (int i = 0; i < _destinations.length; i++)
+          _visited.contains(i) ? _moduleFor(i) : const SizedBox.shrink(),
+      ],
+    );
+  }
+
+  static Widget _moduleFor(int index) {
+    return switch (index) {
+      0 => const HomePage(),
+      1 => const CalibrationPage(),
+      2 => const ViewerPage(),
+      3 => const PlotPage(),
+      _ => const CamPage(),
+    };
   }
 
   @override
   Widget build(BuildContext context) {
-    final Widget body = _ModuleRouter(index: _selectedIndex);
+    final Widget body = _modules();
 
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
@@ -113,23 +148,6 @@ class _HomeShellState extends State<HomeShell> {
         );
       },
     );
-  }
-}
-
-class _ModuleRouter extends StatelessWidget {
-  const _ModuleRouter({required this.index});
-
-  final int index;
-
-  @override
-  Widget build(BuildContext context) {
-    return switch (index) {
-      0 => const HomePage(),
-      1 => const CalibrationPage(),
-      2 => const ViewerPage(),
-      3 => const PlotPage(),
-      _ => const CamPage(),
-    };
   }
 }
 

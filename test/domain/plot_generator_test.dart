@@ -107,6 +107,53 @@ void main() {
     expect(result.gcode, contains('G0 Z2.000'));
     expect(result.gcode, contains('G1 Z-0.400'));
     expect(result.gcode, isNot(contains('M3 S')));
+    expect(result.gcode, isNot(contains('M5')));
+  });
+
+  test('eleva la punta a la altura segura antes de cada viaje en XY', () {
+    const PlotSettings settings = PlotSettings(
+      widthMm: 40,
+      pixelMm: 1,
+      pen: PenControl.zAxis,
+      zUpMm: 5,
+      zDownMm: -0.3,
+      drawFeedMmMin: 900,
+      travelFeedMmMin: 3000,
+    );
+    // Dos islas separadas: obliga a viajar con la punta levantada.
+    final img.Image image = _squareAt(60, 10, left: 10, top: 10);
+    for (int y = 10; y < 20; y++) {
+      for (int x = 40; x < 50; x++) {
+        image.setPixelRgb(x, y, 0, 0, 0);
+      }
+    }
+    final PlotResult result = generator.generate(
+      _job(image, settings: settings),
+    );
+
+    final List<String> lines = <String>[
+      for (final String line in result.gcode.split('\n'))
+        if (line.trim().isNotEmpty) line.trim(),
+    ];
+    int travels = 0;
+    for (int i = 0; i < lines.length; i++) {
+      if (!lines[i].startsWith('G0 X')) {
+        continue;
+      }
+      travels++;
+      expect(
+        lines[i - 1],
+        'G0 Z5.000',
+        reason:
+            '«${lines[i]}» debe ir precedido de la subida a la altura segura',
+      );
+    }
+    // Un viaje por trayecto más el regreso al origen, también con la punta arriba.
+    expect(travels, result.paths + 1);
+    expect(travels, greaterThanOrEqualTo(2));
+    // La bajada lleva avance propio: no hereda el rápido del viaje.
+    expect(result.gcode, contains('G1 Z-0.300 F900.000'));
+    expect(result.gcode, contains('F3000.000'));
   });
 
   test('ordena las rutas por proximidad al origen', () {
