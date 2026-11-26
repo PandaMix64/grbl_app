@@ -1041,6 +1041,47 @@ programa + volumen» como botón aparte.
 
 ---
 
+### S-23 — 2026-11-25 · Simulación fluida y encuadre compartido con la cama
+
+**Síntomas reportados:** (1) la simulación seguía viéndose «en otra posición»;
+(2) al pulsar reproducir la interfaz se bloqueaba —la simulación continuaba pero
+no se podía interactuar—.
+
+**Diagnóstico**
+
+1. **Bloqueo:** `ProgramPainter` reproyectaba y reasignaba los tres lotes de toda
+   la trayectoria en **cada fotograma**. Medido con 30 000 segmentos: **8,9–10,6
+   ms por fotograma solo en el pintor**, a 60 fps. El hilo de UI se saturaba y los
+   eventos de puntero se encolaban mientras el ticker seguía avanzando (por eso
+   «la simulación continúa pero no responde»).
+2. **Posición:** la cama se dibuja en coordenadas absolutas (`0…$130`, `0…$131`)
+   mientras el encuadre se centraba **solo en el programa**. Con un trabajo
+   pequeño cerca del origen la cama quedaba fuera del viewport: programa y cama no
+   compartían encuadre y la escena parecía descolocada.
+
+**Entregado**
+
+| # | Cambio | Archivo(s) | Estado |
+| :--- | :--- | :--- | :--- |
+| 1 | `ProgramBatches` + `ProgramPainter.buildBatches`: una sola pasada que deja tres `Float32List` listos para `drawRawPoints` | `lib/features/viewer/program_painter.dart` | ✅ |
+| 2 | El lienzo cachea esa proyección (programa + vista + línea ejecutada) y también la usa para el búfer de la estela: repintar ya no recorre segmentos (**10,6 → 0,75 ms por fotograma**, 14× menos) | `widgets/viewer_canvas.dart` | ✅ |
+| 3 | Encuadre = **unión de programa y volumen de trabajo**: la cama y el recorrido comparten sistema de referencia y se ven juntos | `widgets/viewer_canvas.dart` | ✅ |
+| 4 | 3 pruebas nuevas: lotes idénticos entre fotogramas de simulación, encuadre con cama dentro del lienzo y (de S-22) estela sobre el recorrido | `test/features/viewer_canvas_test.dart` | ✅ |
+
+**Verificaciones ejecutadas:** `dart format --set-exit-if-changed .` → 0 cambios ·
+`flutter analyze` → *No issues found* · `flutter test` → **281 en verde, 1
+saltada** · `flutter build windows --debug` → OK. Medición del pintor con 29 999
+segmentos: sin caché 10,61 ms/fotograma; construir los lotes 7,46 ms **una vez**;
+con caché **0,75 ms/fotograma**.
+
+**Decisiones tomadas:** ADR-055, ADR-056.
+
+**Abierto al cierre:** con programas enormes (> 100 000 segmentos) el coste pasa
+al rasterizado de la GPU; si molesta, el siguiente paso es decimar segmentos
+sub-píxel al dibujar (afecta también al índice de la estela, hay que mapearlo).
+
+---
+
 ## 5. Decisiones de arquitectura (ADR resumidas)
 
 | ID | Decisión | Motivo | Consecuencia |
@@ -1098,6 +1139,8 @@ programa + volumen» como botón aparte.
 | ADR-051 | El simulador del visor tiene **reloj propio derivado de los avances** del G-code, no de la telemetría | Revisar un programa requiere poder pausar, retroceder y acelerar; la máquina solo informa de su estado real y no permite ver el futuro | `SimulationTimeline` (dominio puro, testeable) + `SimulationController`; los `G0` usan un rápido supuesto (5000 mm/min) porque no llevan `F` |
 | ADR-052 | La estela del simulador se pinta en la **misma capa** que la trayectoria, como prefijo del búfer proyectado | En una capa aparte cualquier divergencia de tamaño o proyección desplazaba la simulación respecto al recorrido (S-22) | Un solo `CustomPaint` (`painter` + `foregroundPainter`) ⇒ mismo origen garantizado; el coste se resuelve con `Float32List.view` sobre el prefijo (O(1)) y el búfer cacheado por programa+proyección |
 | ADR-053 | Las previsualizaciones del visor (avance ejecutado y simulación) se pueden **apagar por separado** | Trayectoria, avance real y estela a la vez saturan el lienzo y estorban al comprobar el dibujo | `previewVisibilityProvider`; botón de ojo en cada barra; apagarlas no altera el estado de la ejecución ni de la reproducción |
+| ADR-055 | La trayectoria se proyecta **una vez** en lotes cacheados; repintar nunca recorre segmentos | Reproyectar en cada fotograma saturaba el hilo de UI y bloqueaba la interfaz mientras la simulación seguía (S-23) | `ProgramBatches` + caché en el lienzo por programa/vista/línea ejecutada; 10,6 → 0,75 ms por fotograma con 30 000 segmentos |
+| ADR-056 | El encuadre del visor es la **unión de la trayectoria y el volumen de trabajo** | La cama se dibuja en coordenadas absolutas: encuadrar solo el programa la dejaba fuera de la vista y la escena parecía descolocada | Programa y cama comparten sistema de referencia siempre; los trabajos pequeños que quedan lejos del origen se ven más pequeños (zoom disponible) |
 
 ---
 

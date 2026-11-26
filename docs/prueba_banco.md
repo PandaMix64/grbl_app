@@ -82,6 +82,8 @@ G1 Z0
 | 5.1e | Cambiar la velocidad a 4× y reproducir | El reloj avanza cuatro veces más rápido; el tiempo mostrado sigue siendo el del programa |
 | 5.1f | Observar la estela sobre la trayectoria | La estela del simulador va **exactamente encima** de la ruta, sin desplazarse ni cambiar de escala |
 | 5.1g | Ojo de la barra del simulador / de la barra de ejecución | Cada capa se oculta y se muestra por separado; el progreso de ambas se conserva |
+| 5.1h | Reproducir un programa grande (miles de líneas) | La interfaz sigue respondiendo: se puede arrastrar, parar y cambiar de pestaña durante la reproducción |
+| 5.1i | Cargar un trabajo pequeño con una cama grande y pulsar «Centrar trazado» | La cama y el recorrido se ven juntos, en el mismo sistema de referencia |
 | 5.2 | «Ejecutar» con el perfil de holgura ≠ 0 | Diálogo de confirmación; mensaje con «N compensaciones» |
 | 5.3 | Observar el progreso | La línea avanza con el movimiento real; la parte ejecutada cambia de color |
 | 5.4 | «Pausa» a mitad | `Hold`, herramienta apagada, «Progreso guardado en la línea N» |

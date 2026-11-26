@@ -132,6 +132,9 @@ El módulo de Calibración permite:
   máquina y se pausa solo si hay un trabajo real en marcha.
 - **Capas conmutables**: cada barra tiene un ojo para apagar/encender su previsualización —avance ejecutado y cabezal real
   en la de ejecución; estela del simulador en la de reproducción— sin perder el progreso de ninguna de las dos.
+- **Encuadre compartido**: la vista encuadra **junto** el programa y el volumen de trabajo (cama), así ambos comparten el
+  mismo sistema de referencia; la trayectoria se proyecta una sola vez y se cachea, de modo que reproducir la simulación
+  no bloquea la interfaz aunque el programa tenga decenas de miles de segmentos.
 - El cabezal usa la **última posición conocida**: GRBL omite `WCO` en la mayoría de reportes, así que la app memoriza el offset y conserva el WPos en lugar de borrarlo. Si un reporte no trae posición, la barra y el panel de origen lo indican como «(última lectura)».
 - Los códigos que cambian el sistema de coordenadas (`G28`, `G30`, `G53`, `G92`) **no se simulan**: se muestran como avisos.
 
