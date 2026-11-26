@@ -998,6 +998,42 @@ aproximados; si molestan, se pueden tomar de la EEPROM del perfil conectado.
 
 ---
 
+### S-22 — 2026-11-25 · Estela alineada con la trayectoria y capas conmutables
+
+**Síntoma reportado:** en el visor la simulación aparecía **desplazada** (arriba
+y a la izquierda) respecto al recorrido y a la cama; se sospechaba de la
+perspectiva del viewport.
+
+**Causa:** la estela se dibujaba en **su propia capa** (`CustomPaint` +
+`RepaintBoundary` dentro de un `Stack`) con su propio búfer proyectado. Dos
+capas independientes solo coinciden si tamaño, proyección y origen son idénticos
+en el mismo fotograma; cualquier divergencia (tamaño del lienzo, caché del
+búfer, repintado independiente) se ve como un desplazamiento o un cambio de
+escala, que es exactamente lo que mostraba la captura.
+
+**Entregado**
+
+| # | Cambio | Archivo(s) | Estado |
+| :--- | :--- | :--- | :--- |
+| 1 | Estela y trayectoria en **un único `CustomPaint`** (`painter` + `foregroundPainter`): mismo tamaño, misma proyección y mismo origen, sin posibilidad de desfase | `lib/features/viewer/widgets/viewer_canvas.dart` | ✅ |
+| 2 | Se conserva el rendimiento: prefijo O(1) sobre el búfer cacheado y `willChange` mientras hay estela; una sola capa que repintar | `widgets/viewer_canvas.dart`, `simulation_painter.dart` | ✅ |
+| 3 | `previewVisibilityProvider` con `showExecution` y `showSimulation` | `lib/features/viewer/preview_visibility.dart` | ✅ |
+| 4 | Conmutador de ojo en la barra de ejecución (avance ejecutado + cabezal real) y en la del simulador (estela) | `widgets/execution_bar.dart`, `widgets/simulation_bar.dart` | ✅ |
+| 5 | 3 pruebas nuevas: lienzo compartido y cabezal en la posición que dicta la proyección, conmutadores y ocultar la simulación desde la barra | `test/features/viewer_canvas_test.dart`, `test/features/simulation_bar_test.dart` | ✅ |
+
+**Verificaciones ejecutadas:** `dart format --set-exit-if-changed .` → 0 cambios ·
+`flutter analyze` → *No issues found* · `flutter test` → **279 en verde, 1
+saltada** · `flutter build windows --debug` → OK.
+
+**Decisiones tomadas:** ADR-052 (revisada en esta sesión), ADR-053.
+
+**Abierto al cierre:** la cama se dibuja en coordenadas absolutas (`0…$130`,
+`0…$131`) mientras la vista se centra en el programa; si un trabajo está lejos
+del origen, la cama puede quedar fuera del encuadre. Valorar un «encuadrar
+programa + volumen» como botón aparte.
+
+---
+
 ## 5. Decisiones de arquitectura (ADR resumidas)
 
 | ID | Decisión | Motivo | Consecuencia |
@@ -1053,7 +1089,8 @@ aproximados; si molestan, se pueden tomar de la EEPROM del perfil conectado.
 | ADR-049 | Los módulos de navegación se montan una vez y se **conservan** (`IndexedStack` perezoso) en lugar de recrearse | Devolver un widget nuevo por pestaña destruía el `State` de la página: los formularios de CAM y trazado volvían a los valores por defecto sin avisar —el plóter pasaba de «Eje Z» a «Husillo» y el G-code salía sin `G0 Z`, con la punta arrastrando— | Cada módulo se monta al visitarse y permanece en memoria hasta cerrar la app; no hay forma de reiniciar un formulario salvo recargar |
 | ADR-050 | El retroceso del rotulador por Z usa la **altura segura del perfil** y avisa si el operario la baja | 2 mm fijos no garantizan que la punta libre el papel, y «altura segura» ya es un dato del perfil que usan las secuencias de reanudación | `G0 Z<safeZ>` antes de cada viaje en XY; aviso no bloqueante al generar; la bajada `G1 Z…` lleva el avance de dibujo |
 | ADR-051 | El simulador del visor tiene **reloj propio derivado de los avances** del G-code, no de la telemetría | Revisar un programa requiere poder pausar, retroceder y acelerar; la máquina solo informa de su estado real y no permite ver el futuro | `SimulationTimeline` (dominio puro, testeable) + `SimulationController`; los `G0` usan un rápido supuesto (5000 mm/min) porque no llevan `F` |
-| ADR-052 | La estela del simulador se pinta en **capa aparte** y como prefijo del búfer proyectado | Repintar la trayectoria completa a 60 fps recorrería cientos de miles de segmentos por fotograma | `SimulationPainter` con `Float32List.view` sobre el prefijo (O(1)), caché del búfer por programa+proyección y `RepaintBoundary` para no repintar la ruta |
+| ADR-052 | La estela del simulador se pinta en la **misma capa** que la trayectoria, como prefijo del búfer proyectado | En una capa aparte cualquier divergencia de tamaño o proyección desplazaba la simulación respecto al recorrido (S-22) | Un solo `CustomPaint` (`painter` + `foregroundPainter`) ⇒ mismo origen garantizado; el coste se resuelve con `Float32List.view` sobre el prefijo (O(1)) y el búfer cacheado por programa+proyección |
+| ADR-053 | Las previsualizaciones del visor (avance ejecutado y simulación) se pueden **apagar por separado** | Trayectoria, avance real y estela a la vez saturan el lienzo y estorban al comprobar el dibujo | `previewVisibilityProvider`; botón de ojo en cada barra; apagarlas no altera el estado de la ejecución ni de la reproducción |
 
 ---
 

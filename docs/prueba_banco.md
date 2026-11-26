@@ -80,6 +80,8 @@ G1 Z0
 | 5.1c | Arrastrar la línea de tiempo a la mitad | Cabezal y estela saltan a ese punto; al soltar sigue desde ahí |
 | 5.1d | «Bloque siguiente» / «Bloque anterior» sin reproducir | Avanza/retrocede exactamente un bloque del G-code |
 | 5.1e | Cambiar la velocidad a 4× y reproducir | El reloj avanza cuatro veces más rápido; el tiempo mostrado sigue siendo el del programa |
+| 5.1f | Observar la estela sobre la trayectoria | La estela del simulador va **exactamente encima** de la ruta, sin desplazarse ni cambiar de escala |
+| 5.1g | Ojo de la barra del simulador / de la barra de ejecución | Cada capa se oculta y se muestra por separado; el progreso de ambas se conserva |
 | 5.2 | «Ejecutar» con el perfil de holgura ≠ 0 | Diálogo de confirmación; mensaje con «N compensaciones» |
 | 5.3 | Observar el progreso | La línea avanza con el movimiento real; la parte ejecutada cambia de color |
 | 5.4 | «Pausa» a mitad | `Hold`, herramienta apagada, «Progreso guardado en la línea N» |
