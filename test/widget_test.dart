@@ -134,6 +134,9 @@ void main() {
     // La barra de ejecución compacta vive sobre el lienzo y queda bloqueada sin
     // conexión.
     expect(find.byTooltip('Ejecutar programa'), findsOneWidget);
+    // El simulador se superpone abajo y ya está listo sin conexión.
+    expect(find.byTooltip('Reproducir simulación'), findsOneWidget);
+    expect(find.byType(Slider), findsOneWidget);
     expect(
       find.textContaining('Conecta la máquina para ejecutar'),
       findsOneWidget,

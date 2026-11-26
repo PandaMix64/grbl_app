@@ -10,6 +10,7 @@ import '../connection/connection_controller.dart';
 import 'execution_controller.dart';
 import 'viewer_controller.dart';
 import 'widgets/execution_bar.dart';
+import 'widgets/simulation_bar.dart';
 import 'widgets/viewer_canvas.dart';
 
 /// Visor de proyectos: carga G-code, lo simula en 3D y sigue la telemetría.
@@ -106,6 +107,12 @@ class ViewerPage extends ConsumerWidget {
                             onFitView: () =>
                                 canvasKey.currentState?.resetView(),
                           ),
+                        ),
+                        Positioned(
+                          bottom: 10,
+                          left: 10,
+                          right: 10,
+                          child: const SimulationBar(),
                         ),
                       ],
                     )

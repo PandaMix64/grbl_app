@@ -64,7 +64,9 @@ class _HomeShellState extends State<HomeShell> {
     });
   }
 
-  /// Módulos montados una sola vez y ocultos en lugar de destruidos.
+  /// Módulos montados una sola vez, ocultos en lugar de destruidos y **mudos**
+  /// para los tickers cuando no son el módulo activo: el simulador del visor no
+  /// sigue avanzando mientras se mira otra pestaña.
   ///
   /// Con un `switch` que devolvía un widget nuevo, cambiar de pestaña destruía
   /// el `State` de la página: los formularios (rotulador del plóter, modo del
@@ -78,7 +80,9 @@ class _HomeShellState extends State<HomeShell> {
       sizing: StackFit.expand,
       children: <Widget>[
         for (int i = 0; i < _destinations.length; i++)
-          _visited.contains(i) ? _moduleFor(i) : const SizedBox.shrink(),
+          _visited.contains(i)
+              ? TickerMode(enabled: i == _selectedIndex, child: _moduleFor(i))
+              : const SizedBox.shrink(),
       ],
     );
   }
