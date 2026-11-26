@@ -23,7 +23,7 @@ El detalle de tareas, decisiones (ADR), riesgos y bitácora de cada sesión vive
 
 | Documento | Contenido |
 | :--- | :--- |
-| [`docs/ruta_de_accion_entorno_cnc_flutter_y_grbl.md`](docs/ruta_de_accion_entorno_cnc_flutter_y_grbl.md) | Plan original del autor (arquitectura, protocolo GRBL, módulos, fases) |
+| [`docs/ruta_de_accion_entorno_cnc_flutter_y_grbl.md`](docs/ruta_de_accion_entorno_cnc_flutter_y_grbl.md) | Plan original  (arquitectura, protocolo GRBL, módulos, fases) |
 | [`docs/revision_tecnica_ruta_de_accion.md`](docs/revision_tecnica_ruta_de_accion.md) | Revisión contra la especificación oficial de GRBL v1.1h: hallazgos P0/P1/P2 y parches propuestos |
 | [`ESTADO_PROYECTO.md`](ESTADO_PROYECTO.md) | Tablero de avance, ADR, riesgos y bitácora de sesiones |
 | [`docs/empaquetado.md`](docs/empaquetado.md) | Build de Windows y APK de Android: requisitos, firma y limitaciones |
@@ -156,6 +156,11 @@ Pestaña dedicada a **dibujar con rotulador**, con dos procesados de imagen:
   configurables; el zigzag entre líneas reduce los desplazamientos.
 - **Rotulador** configurable: `M3 S…`/`M5` (servo en el husillo) o `G1 Z…`/`G0 Z…` (eje Z), con avances de dibujo y de
   viaje separados.
+- **Altura segura**: con «Eje Z» la Z de viaje se propone desde la **altura segura del perfil** y el G-code eleva la
+  punta (`G0 Z…`) **antes de cada desplazamiento en XY**; si se baja de esa altura, la app avisa de que la punta
+  puede arrastrar. La bajada usa el avance de dibujo, no el rápido del viaje.
+- Los parámetros del formulario **se conservan al cambiar de pestaña**: generar, revisar en el visor y volver ya no
+  reinicia el rotulador ni el modo.
 - Vista previa del dibujo, validación de volumen del perfil y **envío al visor** (nunca directo a la máquina).
 
 

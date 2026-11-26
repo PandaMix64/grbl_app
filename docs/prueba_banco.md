@@ -175,7 +175,10 @@ correcta.
 | 13.3 | Ejecutar y observar los viajes | El rotulador sube entre trayectos y el orden minimiza los desplazamientos |
 | 13.4 | Cambiar a **Bordado raster** con separación 2 mm y ángulo 45° | Relleno de líneas paralelas; zigzag entre líneas |
 | 13.5 | Añadir puntada de 3 mm | El relleno se ve a trazos (efecto bordado) |
-| 13.6 | Cambiar el rotulador a **eje Z** | Baja/sube con `G1 Z`/`G0 Z` en lugar de `M3 S`/`M5` |
+| 13.6 | Cambiar el rotulador a **eje Z** | Aparecen «Altura segura Z» (con el valor del perfil) y «Z de dibujo»; se emite `G1 Z…`/`G0 Z…` en lugar de `M3 S`/`M5` |
+| 13.6b | Inspeccionar el G-code del visor | Antes de cada `G0 X… Y…` hay un `G0 Z<altura segura>`; la punta nunca viaja apoyada |
+| 13.6c | Bajar «Altura segura Z» por debajo de la del perfil | La app avisa de que la punta puede arrastrar entre trayectos |
+| 13.6d | Generar, ir al visor y volver a Trazado | El formulario conserva rotulador, modo, umbral y avances |
 | 13.7 | Enviar al visor y ejecutar | Se revisa el dibujo antes de empezar; el archivo termina en `_trazado.gcode` |
 
 ---

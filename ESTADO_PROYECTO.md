@@ -908,8 +908,49 @@ desconexión); el timeout de 30 s del cliente puede saltar si el diálogo de per
 queda abierto mucho tiempo (basta reintentar); el APK sigue empaquetando
 `libserialport.so` sin usarlo; `usb_serial` busca mantenedor (R-22).
 
-**Trazabilidad (commits de S-19):** pendiente de commit —
+**Trazabilidad (commits de S-19):** `26948c1` —
 `feat(conexion): habilita la serie por USB-OTG en Android [S-19]`.
+
+---
+
+### S-20 — 2026-11-25 · Rotulador de Z: altura segura y estado del formulario
+
+**Síntoma reportado:** en el modo de plóter, el G-code generado no elevaba la
+punta a una altura segura y el cabezal seguía dibujando entre trayectos.
+
+**Diagnóstico:** el generador **sí** emitía el retroceso. Se comprobó generando
+un programa con rotulador por Z y observando el puerto emulado de punta a punta
+(`generate` → visor → `ExecutionController.start`): cada trayecto salía con
+`G0 Z2.000` antes del `G0 X… Y…`. La causa estaba antes: `_ModuleRouter`
+devolvía un widget nuevo en cada cambio de pestaña, así que el `State` de
+`PlotPage` se destruía y el formulario volvía a sus valores por defecto
+—rotulador **«Husillo»**—. Al regenerar después de revisar el trabajo en el
+visor, el programa salía con `M3 S…`/`M5` y **sin ningún movimiento de Z**.
+Además, la Z de viaje por defecto (2 mm) era independiente de la altura segura
+del perfil.
+
+**Entregado**
+
+| # | Cambio | Archivo(s) | Estado |
+| :--- | :--- | :--- | :--- |
+| 1 | Módulos montados una vez y conservados con `IndexedStack` (lazy): el formulario ya no se reinicia al navegar | `lib/app/home_shell.dart` | ✅ |
+| 2 | «Altura segura Z» se propone desde `MachineProfile.safeZmm` mientras el campo no se toque; «Valores del perfil» también la aplica | `lib/features/plot/plot_page.dart` | ✅ |
+| 3 | Aviso no bloqueante si `zUpMm` queda por debajo de la altura segura del perfil (la punta arrastraría) | `lib/features/plot/plot_controller.dart` | ✅ |
+| 4 | Bajada `G1 Z…` con `F` explícito (avance de dibujo), sin heredar el rápido del viaje | `lib/domain/services/plot_generator.dart` | ✅ |
+| 5 | `M5` final solo con rotulador por husillo | `plot_generator.dart` | ✅ |
+| 6 | Ayuda contextual en la pestaña: «Husillo» no emite movimiento de Z | `plot_page.dart` | ✅ |
+| 7 | 4 pruebas nuevas: orden `G0 Z` → `G0 X… Y…`, aviso de altura segura y parámetros conservados al cambiar de pestaña | `test/domain/plot_generator_test.dart`, `test/features/plot_controller_test.dart`, `test/widget_test.dart` | ✅ |
+
+**Verificaciones ejecutadas:** `dart format --set-exit-if-changed .` → 0 cambios ·
+`flutter analyze` → *No issues found* · `flutter test` → **260 en verde, 1
+saltada**. La prueba del formulario se validó revirtiendo el arreglo: con el
+enrutador antiguo falla (`Altura segura Z` no aparece) y con `IndexedStack` pasa.
+
+**Decisiones tomadas:** ADR-049, ADR-050.
+
+**Abierto al cierre:** confirmar en la placa los pasos §13.6b y §13.6c de
+`docs/prueba_banco.md`; el `State` de los módulos vive ahora toda la sesión (las
+páginas pesadas no se liberan al cambiar de pestaña).
 
 ---
 
@@ -965,6 +1006,8 @@ queda abierto mucho tiempo (basta reintentar); el APK sigue empaquetando
 | ADR-046 | Vendorizar `flutter_libserialport` (0.6.0) con un `android/build.gradle.kts` propio | Flutter 3.50 exige Gradle 9.5/AGP 9.3.1 y el build publicado usa `jcenter()` + AGP 8.7, que Gradle 9 ya no evalúa | Solo cambia el build de Android; el código Dart y las compilaciones CMake de escritorio son los publicados. Revisar al actualizar el plugin |
 | ADR-047 | En Android la conexión serie se declara no soportada y se bloquea con aviso | Abrir el USB exige permiso del `UsbManager` y apertura por descriptor, flujo que el plugin no implementa; el error nativo no es accionable | Sustituida por ADR-048 en S-19: la fachada `SerialPortRepository` permitió añadir el transporte sin tocar el resto |
 | ADR-048 | En Android la serie va por `usb_serial` (drivers de `usb-serial-for-android` vendorizados) y el worker corre en el isolate principal | Los chips USB no aparecen como `tty`; hace falta `UsbManager.requestPermission` y *bulk transfers*. Un `MethodChannel` no funciona en un isolate de fondo y el plugin ya es asíncrono, así que el isolate FFI no aporta | `AndroidUsbSerialRepository` detrás de `SerialPortRepository`; escritorio sigue con `libserialport` en isolate. Si el plugin deja de mantenerse, solo se cambia esa clase |
+| ADR-049 | Los módulos de navegación se montan una vez y se **conservan** (`IndexedStack` perezoso) en lugar de recrearse | Devolver un widget nuevo por pestaña destruía el `State` de la página: los formularios de CAM y trazado volvían a los valores por defecto sin avisar —el plóter pasaba de «Eje Z» a «Husillo» y el G-code salía sin `G0 Z`, con la punta arrastrando— | Cada módulo se monta al visitarse y permanece en memoria hasta cerrar la app; no hay forma de reiniciar un formulario salvo recargar |
+| ADR-050 | El retroceso del rotulador por Z usa la **altura segura del perfil** y avisa si el operario la baja | 2 mm fijos no garantizan que la punta libre el papel, y «altura segura» ya es un dato del perfil que usan las secuencias de reanudación | `G0 Z<safeZ>` antes de cada viaje en XY; aviso no bloqueante al generar; la bajada `G1 Z…` lleva el avance de dibujo |
 
 ---
 
