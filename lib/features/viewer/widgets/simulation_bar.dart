@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../execution_controller.dart';
+import '../preview_visibility.dart';
 import '../simulation_controller.dart';
 
 /// Barra del simulador: reproducir, avanzar bloque a bloque y línea de tiempo.
@@ -83,6 +84,7 @@ class _SimulationBarState extends ConsumerState<SimulationBar>
     final SimulationController controller = ref.read(
       simulationControllerProvider.notifier,
     );
+    final PreviewVisibility visibility = ref.watch(previewVisibilityProvider);
 
     ref.listen<bool>(
       simulationControllerProvider.select(
@@ -150,6 +152,17 @@ class _SimulationBarState extends ConsumerState<SimulationBar>
               ),
             ),
             _speedMenu(theme, simulation, controller, enabled),
+            _button(
+              icon: visibility.showSimulation
+                  ? Icons.visibility
+                  : Icons.visibility_off,
+              tooltip: visibility.showSimulation
+                  ? 'Ocultar simulación'
+                  : 'Mostrar simulación',
+              onPressed: () => ref
+                  .read(previewVisibilityProvider.notifier)
+                  .toggleSimulation(),
+            ),
             _time(theme, simulation),
           ],
         ),

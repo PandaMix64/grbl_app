@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:grbl_app/app/providers.dart';
 import 'package:grbl_app/data/database/app_database.dart';
 import 'package:grbl_app/data/serial/grbl_worker_client.dart';
+import 'package:grbl_app/features/viewer/preview_visibility.dart';
 import 'package:grbl_app/features/viewer/simulation_controller.dart';
 import 'package:grbl_app/features/viewer/viewer_controller.dart';
 import 'package:grbl_app/features/viewer/widgets/simulation_bar.dart';
@@ -118,6 +119,18 @@ void main() {
     // cronómetro).
     expect(state().seconds, greaterThan(0.7));
     expect(state().seconds, lessThan(1.9));
+  });
+
+  testWidgets('la barra puede ocultar la simulación sin detenerla', (
+    WidgetTester tester,
+  ) async {
+    await pumpBar(tester);
+
+    await tester.tap(find.byTooltip('Ocultar simulación'));
+    await tester.pump();
+
+    expect(container.read(previewVisibilityProvider).showSimulation, isFalse);
+    expect(find.byTooltip('Mostrar simulación'), findsOneWidget);
   });
 
   testWidgets('cabe en una pantalla de móvil sin desbordar', (

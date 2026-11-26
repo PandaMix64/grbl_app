@@ -136,6 +136,8 @@ void main() {
     expect(find.byTooltip('Ejecutar programa'), findsOneWidget);
     // El simulador se superpone abajo y ya está listo sin conexión.
     expect(find.byTooltip('Reproducir simulación'), findsOneWidget);
+    expect(find.byTooltip('Ocultar simulación'), findsOneWidget);
+    expect(find.byTooltip('Ocultar avance ejecutado'), findsOneWidget);
     expect(find.byType(Slider), findsOneWidget);
     expect(
       find.textContaining('Conecta la máquina para ejecutar'),

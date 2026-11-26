@@ -8,6 +8,7 @@ import '../../../domain/entities/project_file.dart';
 import '../../calibration/calibration_controller.dart';
 import '../../connection/connection_controller.dart';
 import '../execution_controller.dart';
+import '../preview_visibility.dart';
 import '../viewer_controller.dart';
 
 /// Barra de ejecución compacta, superpuesta al lienzo del visor.
@@ -32,6 +33,7 @@ class ExecutionBar extends ConsumerWidget {
       executionControllerProvider.notifier,
     );
     final ProjectFile? resumable = ref.watch(resumableProjectProvider).value;
+    final PreviewVisibility visibility = ref.watch(previewVisibilityProvider);
     final ThemeData theme = Theme.of(context);
 
     final bool connected = connection.isConnected;
@@ -123,6 +125,20 @@ class ExecutionBar extends ConsumerWidget {
                   ),
                 const SizedBox(width: 8),
                 Expanded(child: _progress(theme, execution)),
+                IconButton(
+                  tooltip: visibility.showExecution
+                      ? 'Ocultar avance ejecutado'
+                      : 'Mostrar avance ejecutado',
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => ref
+                      .read(previewVisibilityProvider.notifier)
+                      .toggleExecution(),
+                  icon: Icon(
+                    visibility.showExecution
+                        ? Icons.visibility
+                        : Icons.visibility_off,
+                  ),
+                ),
                 if (onFitView != null)
                   IconButton(
                     tooltip: 'Centrar trazado',

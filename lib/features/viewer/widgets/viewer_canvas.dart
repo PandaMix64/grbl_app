@@ -9,6 +9,7 @@ import '../../../domain/entities/gcode_program.dart';
 import '../../../domain/entities/motion_segment.dart';
 import '../../../domain/services/simulation_timeline.dart';
 import '../program_painter.dart';
+import '../preview_visibility.dart';
 import '../simulation_controller.dart';
 import '../simulation_painter.dart';
 import '../view_projection.dart';
@@ -108,6 +109,7 @@ class ViewerCanvasState extends ConsumerState<ViewerCanvas> {
         (SimulationUiState state) => state.cursor,
       ),
     );
+    final PreviewVisibility visibility = ref.watch(previewVisibilityProvider);
 
     final Vector3 center = _center(program);
     final Vector3 size = _size(program);
@@ -127,6 +129,9 @@ class ViewerCanvasState extends ConsumerState<ViewerCanvas> {
           yawDegrees: _yaw,
           pitchDegrees: _pitch,
         );
+        final SimulationTrail? trail = visibility.showSimulation
+            ? _trail(program, projection, cursor)
+            : null;
 
         return GestureDetector(
           onScaleStart: _onScaleStart,
@@ -134,44 +139,34 @@ class ViewerCanvasState extends ConsumerState<ViewerCanvas> {
           onDoubleTap: _resetView,
           child: Transform.translate(
             offset: _pan,
-            child: SizedBox(
-              width: viewport.width,
-              height: viewport.height,
-              child: Stack(
-                children: <Widget>[
-                  // La pintura solo depende de la proyección: al panear se mueve
-                  // la capa sin repintar los lotes de segmentos.
-                  Positioned.fill(
-                    child: RepaintBoundary(
-                      child: CustomPaint(
-                        key: const Key('viewer-canvas'),
-                        isComplex: true,
-                        willChange: false,
-                        painter: ProgramPainter(
-                          program: program,
-                          projection: projection,
-                          colorScheme: theme.colorScheme,
-                          headPosition: widget.headPosition,
-                          executedUpToLine: widget.executedUpToLine,
-                          workAreaMm: widget.workAreaMm,
-                          gridStepMm: _gridStep(size),
-                        ),
+            // Trayectoria y estela comparten `CustomPaint` (painter y
+            // `foregroundPainter`): mismo tamaño, misma proyección y mismo
+            // origen, así la simulación cae exactamente sobre el recorrido.
+            child: RepaintBoundary(
+              child: CustomPaint(
+                key: const Key('viewer-canvas'),
+                size: viewport,
+                isComplex: true,
+                willChange: trail != null,
+                painter: ProgramPainter(
+                  program: program,
+                  projection: projection,
+                  colorScheme: theme.colorScheme,
+                  headPosition: visibility.showExecution
+                      ? widget.headPosition
+                      : null,
+                  executedUpToLine: visibility.showExecution
+                      ? widget.executedUpToLine
+                      : null,
+                  workAreaMm: widget.workAreaMm,
+                  gridStepMm: _gridStep(size),
+                ),
+                foregroundPainter: trail == null
+                    ? null
+                    : SimulationPainter(
+                        trail: trail,
+                        color: theme.colorScheme.tertiary,
                       ),
-                    ),
-                  ),
-                  Positioned.fill(
-                    child: RepaintBoundary(
-                      child: CustomPaint(
-                        key: const Key('viewer-simulation'),
-                        willChange: true,
-                        painter: SimulationPainter(
-                          trail: _trail(program, projection, cursor),
-                          color: theme.colorScheme.tertiary,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
               ),
             ),
           ),
