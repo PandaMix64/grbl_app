@@ -1080,6 +1080,13 @@ con caché **0,75 ms/fotograma**.
 al rasterizado de la GPU; si molesta, el siguiente paso es decimar segmentos
 sub-píxel al dibujar (afecta también al índice de la estela, hay que mapearlo).
 
+**Trazabilidad (commits de S-23):**
+
+| Hash | Commit |
+| :--- | :--- |
+| `e5d91cb` | `fix(visor): cachea los lotes de la trayectoria y encuadra programa y cama juntos` |
+| `684608d` | `docs: bitacora de S-23 y checklist de rendimiento del simulador` |
+
 ---
 
 ## 5. Decisiones de arquitectura (ADR resumidas)
